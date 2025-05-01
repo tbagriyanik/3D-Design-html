@@ -229,125 +229,122 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-// Menü butonları
-for (const btn of document.querySelectorAll('#addMenu button[data-shape]')) {
-  btn.onclick = () => addShape(btn.dataset.shape);
-}
+document.addEventListener('DOMContentLoaded', function() {
+  // Menü işlevselliği için event listener'ları güncelle
+  document.querySelectorAll('#menu button[data-shape]').forEach(btn => {
+    btn.addEventListener('click', () => addShape(btn.dataset.shape));
+  });
 
-document.getElementById('saveBtn').onclick = function() {
-  saveScene('scene.json');
-}
+  // Dosya menüsü işlemleri
+  document.getElementById('newBtn').addEventListener('click', () => {
+    // Tüm nesneleri temizle
+    for (const obj of objects) {
+      scene.remove(obj);
+      if (obj.userData.outline) scene.remove(obj.userData.outline);
+    }
+    objects = [];
+    selected = null;
+  });
 
-document.getElementById('saveAsBtn').onclick = function() {
-  const name = prompt('Farklı kaydetmek için dosya adı girin:', 'scene.json');
-  if (name) saveScene(name);
-}
-
-function saveScene(filename) {
-  const arr = objects.map(obj => ({
-    type: obj.geometry.type,
-    color: obj.material.color.getHex(),
-    position: obj.position.toArray(),
-    scale: obj.scale.toArray(), // Save scale information
-    rotX: obj.userData.rotX,
-    rotY: obj.userData.rotY
-  }));
-  const blob = new Blob([JSON.stringify(arr)], {type:'application/json'});
-  const a = document.createElement('a');
-  a.href = URL.createObjectURL(blob);
-  a.download = filename;
-  a.click();
-}
-
-document.getElementById('loadBtn').onclick = function() {
-  document.getElementById('fileInput').click();
-}
-
-document.getElementById('fileInput').onchange = function(e) {
-  const file = e.target.files[0];
-  if (!file) return;
-  const reader = new FileReader();
-  reader.onload = function(ev) {
-    try {
-      const arr = JSON.parse(ev.target.result);
-      for (const obj of objects) {
-        scene.remove(obj);
-        if (obj.userData.outline) scene.remove(obj.userData.outline);
-      }
-      objects = [];
-      for (const item of arr) {
-        let mesh, geometry;
-        const color = new THREE.Color(item.color);
-        if (item.type === 'BoxGeometry') {
-          geometry = new THREE.BoxGeometry(50,50,50);
-          mesh = new THREE.Mesh(
-            geometry,
-            new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-          );
-        } else if (item.type === 'SphereGeometry') {
-          geometry = new THREE.SphereGeometry(30, 32, 24);
-          mesh = new THREE.Mesh(
-            geometry,
-            new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-          );
-        } else if (item.type === 'CylinderGeometry') {
-          geometry = new THREE.CylinderGeometry(25,25,60, 32);
-          mesh = new THREE.Mesh(
-            geometry,
-            new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-          );
-        } else {
-          continue;
-        }
-        mesh.position.fromArray(item.position);
-        mesh.scale.fromArray(item.scale); // Load scale information
-        mesh.userData = {rotX: item.rotX, rotY: item.rotY};
-        scene.add(mesh);
-        addOutline(mesh, geometry);
-        objects.push(mesh);
-      }
-    } catch(err) { alert('Dosya okunamadı!'); }
+  document.getElementById('saveBtn').onclick = function() {
+    saveScene('scene.json');
   }
-  reader.readAsText(file);
-}
 
-document.getElementById('submenuToggle').onclick = function() {
-  const submenu = document.getElementById('submenu');
-  const addMenu = document.getElementById('addMenu');
-  submenu.style.display = (submenu.style.display === 'none') ? 'block' : 'none';
-  if (submenu.style.display === 'block') addMenu.style.display = 'none';
-};
+  document.getElementById('saveAsBtn').onclick = function() {
+    const name = prompt('Farklı kaydetmek için dosya adı girin:', 'scene.json');
+    if (name) saveScene(name);
+  }
 
-document.getElementById('addMenuToggle').onclick = function() {
-  const addMenu = document.getElementById('addMenu');
-  const submenu = document.getElementById('submenu');
-  addMenu.style.display = (addMenu.style.display === 'none') ? 'block' : 'none';
-  if (addMenu.style.display === 'block') submenu.style.display = 'none';
-};
+  document.getElementById('loadBtn').onclick = function() {
+    document.getElementById('fileInput').click();
+  }
 
-// Add functionality for the 'Hakkında' button
-const aboutBtn = document.getElementById('aboutBtn');
-aboutBtn.onclick = function () {
-  const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
-  alert(message);
-};
+  document.getElementById('fileInput').onchange = function(e) {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(ev) {
+      try {
+        const arr = JSON.parse(ev.target.result);
+        for (const obj of objects) {
+          scene.remove(obj);
+          if (obj.userData.outline) scene.remove(obj.userData.outline);
+        }
+        objects = [];
+        for (const item of arr) {
+          let mesh, geometry;
+          const color = new THREE.Color(item.color);
+          if (item.type === 'BoxGeometry') {
+            geometry = new THREE.BoxGeometry(50,50,50);
+            mesh = new THREE.Mesh(
+              geometry,
+              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+            );
+          } else if (item.type === 'SphereGeometry') {
+            geometry = new THREE.SphereGeometry(30, 32, 24);
+            mesh = new THREE.Mesh(
+              geometry,
+              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+            );
+          } else if (item.type === 'CylinderGeometry') {
+            geometry = new THREE.CylinderGeometry(25,25,60, 32);
+            mesh = new THREE.Mesh(
+              geometry,
+              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+            );
+          } else {
+            continue;
+          }
+          mesh.position.fromArray(item.position);
+          mesh.scale.fromArray(item.scale); // Load scale information
+          mesh.userData = {rotX: item.rotX, rotY: item.rotY};
+          scene.add(mesh);
+          addOutline(mesh, geometry);
+          objects.push(mesh);
+        }
+      } catch(err) { alert('Dosya okunamadı!'); }
+    }
+    reader.readAsText(file);
+  }
 
-// Add functionality for language switching
-let currentLanguage = 'tr'; // Default language is Turkish
-const languageButtons = document.querySelectorAll('#languageBtn button[data-lang]');
-languageButtons.forEach(button => {
-  button.onclick = function () {
-    currentLanguage = button.dataset.lang;
-    updateLanguage();
+  document.getElementById('submenuToggle').onclick = function() {
+    const submenu = document.getElementById('submenu');
+    const addMenu = document.getElementById('addMenu');
+    submenu.style.display = (submenu.style.display === 'none') ? 'block' : 'none';
+    if (submenu.style.display === 'block') addMenu.style.display = 'none';
   };
-});
 
-function updateLanguage() {
-  // Update UI elements based on the selected language
-  document.getElementById('projectName').textContent = currentLanguage === 'tr' ? '3D Tasarım' : '3D Design';
-  document.getElementById('statusBar').textContent = currentLanguage === 'tr' 
-    ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset' 
-    : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset';
-}
+  document.getElementById('addMenuToggle').onclick = function() {
+    const addMenu = document.getElementById('addMenu');
+    const submenu = document.getElementById('submenu');
+    addMenu.style.display = (addMenu.style.display === 'none') ? 'block' : 'none';
+    if (addMenu.style.display === 'block') submenu.style.display = 'none';
+  };
+
+  // Add functionality for the 'Hakkında' button
+  const aboutBtn = document.getElementById('aboutBtn');
+  aboutBtn.onclick = function () {
+    const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
+    alert(message);
+  };
+
+  // Add functionality for language switching
+  let currentLanguage = 'tr'; // Default language is Turkish
+  const languageButtons = document.querySelectorAll('#languageBtn button[data-lang]');
+  languageButtons.forEach(button => {
+    button.onclick = function () {
+      currentLanguage = button.dataset.lang;
+      updateLanguage();
+    };
+  });
+
+  function updateLanguage() {
+    // Update UI elements based on the selected language
+    document.getElementById('projectName').textContent = currentLanguage === 'tr' ? '3D Tasarım' : '3D Design';
+    document.getElementById('statusBar').textContent = currentLanguage === 'tr' 
+      ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset' 
+      : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset';
+  }
+});
 
 animate();
