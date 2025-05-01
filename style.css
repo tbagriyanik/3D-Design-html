@@ -80,3 +80,24 @@ body {
   padding: 5px 10px;
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5);
 }
+
+@media (max-width: 600px) {
+  #projectName {
+    font-size: 14px;
+    top: 5px;
+    left: 5px;
+  }
+  #menu {
+    top: 35px;
+    left: 5px;
+    font-size: 14px;
+  }
+  #statusBar {
+    font-size: 12px;
+    padding: 3px 5px;
+  }
+  #scene {
+    width: 100vw;
+    height: 100vh;
+  }
+}

@@ -3,6 +3,7 @@
 
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>3D Tasarım</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -43,8 +44,11 @@
     </div>
     <div id="statusBar">Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset</div>
     <input type="file" id="fileInput" style="display:none" accept="application/json" />
-    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
-    <script src="main.js"></script>
+    <script type="module">
+      import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
+      window.THREE = THREE;
+      import './main.js';
+    </script>
 </body>
 
 </html>

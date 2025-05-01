@@ -1,3 +1,5 @@
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
+
 // Debug message to confirm script execution
 console.log('main.js is loaded and running.');
 
@@ -105,8 +107,8 @@ document.addEventListener('mousemove', e => {
         selected.userData.outline.position.copy(selected.position);
       }
     } else {
-      // Shift ile dönüş hızı fazla
-      const speed = isShift ? 2.0 : 0.5;
+      // Dönüş hızı
+      const speed = 0.5;
       selected.userData.rotY += dx * speed;
       selected.userData.rotX += dy * speed;
     }
@@ -126,7 +128,7 @@ document.addEventListener('mousemove', e => {
 canvas.addEventListener('wheel', e => {
   cameraTargetOrbit.distance += e.deltaY * 0.5;
   cameraTargetOrbit.distance = Math.max(100, Math.min(1000, cameraTargetOrbit.distance));
-});
+}, { passive: true });
 
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault(); // Prevent the default context menu
@@ -160,6 +162,87 @@ canvas.addEventListener('contextmenu', (e) => {
     cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
   }
 });
+
+// Touch event desteği (mobil uyumluluk)
+let lastTouchX = 0, lastTouchY = 0;
+canvas.addEventListener('touchstart', e => {
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const mx = ((touch.clientX-rect.left)/rect.width)*2-1;
+    const my = -(((touch.clientY-rect.top)/rect.height)*2-1);
+    const ray = new THREE.Raycaster();
+    ray.setFromCamera({x:mx, y:my}, camera);
+    const intersects = ray.intersectObjects(objects);
+    if (intersects.length) {
+      selectObject(intersects[0].object);
+      drag = true;
+      lastTouchX = touch.clientX;
+      lastTouchY = touch.clientY;
+      isCameraDrag = false;
+    } else {
+      selectObject(null);
+      isCameraDrag = true;
+      lastTouchX = touch.clientX;
+      lastTouchY = touch.clientY;
+    }
+  }
+}, { passive: false });
+canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    const dx = touch.clientX - lastTouchX;
+    const dy = touch.clientY - lastTouchY;
+    if (drag && selected) {
+      if (isCtrl) {
+        let scaleX = selected.scale.x + dx * 0.01;
+        let scaleY = selected.scale.y - dy * 0.01;
+        scaleX = Math.max(0.1, Math.min(10, scaleX));
+        scaleY = Math.max(0.1, Math.min(10, scaleY));
+        selected.scale.x = scaleX;
+        selected.scale.y = scaleY;
+        selected.scale.z = (scaleX + scaleY) / 2;
+        if (selected.userData.outline) {
+          selected.userData.outline.scale.copy(selected.scale);
+        }
+      } else if (isShift) {
+        selected.position.x += dx;
+        selected.position.y -= dy;
+        if (selected.userData.outline) {
+          selected.userData.outline.position.copy(selected.position);
+        }
+      } else {
+        const speed = 0.5;
+        selected.userData.rotY += dx * speed;
+        selected.userData.rotX += dy * speed;
+      }
+    } else if (isCameraDrag) {
+      cameraTargetOrbit.rotY += dx * 0.5;
+      cameraTargetOrbit.rotX += dy * 0.5;
+      cameraTargetOrbit.rotX = Math.max(-89, Math.min(89, cameraTargetOrbit.rotX));
+    }
+    lastTouchX = touch.clientX;
+    lastTouchY = touch.clientY;
+    e.preventDefault();
+  }
+}, { passive: false });
+
+// Mobilde çift dokunma ile nesne silme
+let lastTap = 0;
+canvas.addEventListener('touchend', e => {
+  const now = Date.now();
+  if (e.touches.length === 0 && selected) {
+    if (now - lastTap < 400) { // 400ms içinde iki kez dokunursa sil
+      scene.remove(selected);
+      if (selected.userData.outline) scene.remove(selected.userData.outline);
+      objects = objects.filter(obj => obj !== selected);
+      selected = null;
+    }
+    lastTap = now;
+  }
+  drag = false;
+  isCameraDrag = false;
+}, { passive: false });
 
 function addOutline(mesh, geometry) {
   const edges = new THREE.EdgesGeometry(geometry);
@@ -380,29 +463,39 @@ document.addEventListener('DOMContentLoaded', function() {
 
   let currentLanguage = getCookie('lang') || 'tr'; // Varsayılan Türkçe
 
-  document.querySelectorAll('#languageBtn ul button[data-lang]').forEach(button => {
-    button.onclick = function (e) {
-      e.stopPropagation();
-      currentLanguage = button.dataset.lang;
-      setCookie('lang', currentLanguage, 365);
-      updateLanguage();
-      // Menü açıkken de anında güncellensin
-      // Alt menüleri de güncelle
-      document.querySelectorAll('#menu button').forEach(btn => {
-        const label = btn.getAttribute('data-label');
-        if (label && menuMap[label]) {
-          btn.textContent = menuMap[label][currentLanguage];
-        }
-      });
-    };
-  });
+  // Tek tek dil butonlarına onclick ekle
+  const trBtn = document.querySelector('#languageBtn ul button[data-lang="tr"]');
+  const enBtn = document.querySelector('#languageBtn ul button[data-lang="en"]');
+  function handleLanguageClick(lang) {
+    currentLanguage = lang;
+    setCookie('lang', currentLanguage, 365);
+    updateLanguage();
+    document.querySelectorAll('#menu button').forEach(btn => {
+      const label = btn.getAttribute('data-label');
+      if (label && menuMap[label]) {
+        btn.textContent = menuMap[label][currentLanguage];
+      }
+    });
+  }
+  if (trBtn) trBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('tr'); };
+  if (enBtn) enBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('en'); };
 
   function updateLanguage() {
     // Menü ve diğer UI elemanlarını güncelle
     document.getElementById('projectName').textContent = currentLanguage === 'tr' ? '3D Tasarım' : '3D Design';
-    document.getElementById('statusBar').textContent = currentLanguage === 'tr' 
-      ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil' 
-      : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete';
+    // Mobil mi kontrolü
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    let statusText = '';
+    if (isMobile) {
+      statusText = currentLanguage === 'tr'
+        ? 'Kısayollar: [Tek Dokun] Seç/Sürükle | [Çift Dokun] Sil | [İki Parmak] Kamera'
+        : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera';
+    } else {
+      statusText = currentLanguage === 'tr'
+        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil'
+        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete';
+    }
+    document.getElementById('statusBar').textContent = statusText;
     // Menü başlıkları ve butonları
     const menuMap = {
       'Dosya': {tr: 'Dosya', en: 'File'},
