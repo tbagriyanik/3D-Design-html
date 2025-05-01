@@ -1,0 +1,71 @@
+body {
+  margin: 0;
+  overflow: hidden;
+  background: #222;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+#scene {
+  display: block;
+  width: 100vw;
+  height: 100vh;
+  outline: none;
+  background: #222;
+}
+#projectName {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #fff;
+  z-index: 20;
+}
+#menu {
+  position: absolute;
+  top: 50px;
+  left: 10px;
+  z-index: 10;
+  background: rgba(30,30,30,0.9);
+  padding: 10px;
+  border-radius: 5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+}
+#menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+#menu ul li {
+  margin: 5px 0;
+}
+#menu ul li ul {
+  display: none;
+  margin-left: 15px;
+}
+#menu ul li:hover ul {
+  display: block;
+}
+#menu button {
+  background: linear-gradient(135deg, #555, #333);
+  color: #fff;
+  border: none;
+  padding: 5px 10px;
+  border-radius: 3px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+#menu button:hover {
+  background: linear-gradient(135deg, #777, #555);
+}
+
+#statusBar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
+  background: rgba(30,30,30,0.9);
+  color: #fff;
+  font-size: 14px;
+  padding: 5px 10px;
+  box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5);
+}

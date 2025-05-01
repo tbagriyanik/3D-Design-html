@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <title>3D Tasarım</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+
+<body>
+    <div id="projectName">3D Tasarım</div>
+    <canvas id="scene" tabindex="0"></canvas>
+    <div id="menu">
+        <ul>
+            <li><button>Dosya</button>
+                <ul>
+                    <li><button id="newBtn">Yeni</button></li>
+                    <li><button id="saveBtn">Kaydet</button></li>
+                    <li><button id="saveAsBtn">Farklı Kaydet</button></li>
+                    <li><button id="loadBtn">Aç</button></li>
+                </ul>
+            </li>
+            <li><button>Ekle</button>
+                <ul>
+                    <li><button data-shape="cube">Küp</button></li>
+                    <li><button data-shape="sphere">Küre</button></li>
+                    <li><button data-shape="cylinder">Silindir</button></li>
+                    <li><button data-shape="plane">Plane</button></li>
+                </ul>
+            </li>
+            <li><button>Ayarlar</button>
+                <ul>
+                    <li><button id="aboutBtn">Hakkında</button></li>
+                    <li><button id="languageBtn">Dil</button>
+                        <ul>
+                            <li><button data-lang="tr">Türkçe</button></li>
+                            <li><button data-lang="en">İngilizce</button></li>
+                        </ul>
+                    </li>
+                </ul>
+            </li>
+        </ul>
+    </div>
+    <div id="statusBar">Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset</div>
+    <input type="file" id="fileInput" style="display:none" accept="application/json" />
+    <script src="https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.min.js"></script>
+    <script src="main.js"></script>
+</body>
+
+</html>
