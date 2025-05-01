@@ -3,6 +3,25 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.m
 // Debug message to confirm script execution
 console.log('main.js is loaded and running.');
 
+// Menü başlıkları ve butonları haritası (global scope)
+const menuMap = {
+  'Dosya': {tr: 'Dosya', en: 'File'},
+  'Yeni': {tr: 'Yeni', en: 'New'},
+  'Kaydet': {tr: 'Kaydet', en: 'Save'},
+  'Farklı Kaydet': {tr: 'Farklı Kaydet', en: 'Save As'},
+  'Aç': {tr: 'Aç', en: 'Open'},
+  'Ekle': {tr: 'Ekle', en: 'Add'},
+  'Küp': {tr: 'Küp', en: 'Cube'},
+  'Küre': {tr: 'Küre', en: 'Sphere'},
+  'Silindir': {tr: 'Silindir', en: 'Cylinder'},
+  'Plane': {tr: 'Plane', en: 'Plane'},
+  'Ayarlar': {tr: 'Ayarlar', en: 'Settings'},
+  'Hakkında': {tr: 'Hakkında', en: 'About'},
+  'Dil': {tr: 'Dil', en: 'Language'},
+  'Türkçe': {tr: 'Türkçe', en: 'Turkish'},
+  'İngilizce': {tr: 'İngilizce', en: 'English'}
+};
+
 // Tüm script kodları buraya taşındı
 let scene = new THREE.Scene();
 let camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
@@ -464,11 +483,11 @@ document.addEventListener('DOMContentLoaded', function() {
   let currentLanguage = getCookie('lang') || 'tr'; // Varsayılan Türkçe
 
   // Tek tek dil butonlarına onclick ekle
-  const trBtn = document.querySelector('#languageBtn ul button[data-lang="tr"]');
-  const enBtn = document.querySelector('#languageBtn ul button[data-lang="en"]');
+  const trBtn = document.getElementById('trDil');
+  const enBtn = document.getElementById('engDil');
   function handleLanguageClick(lang) {
     currentLanguage = lang;
-    setCookie('lang', currentLanguage, 365);
+    setCookie('lang', currentLanguage, 365);    
     updateLanguage();
     document.querySelectorAll('#menu button').forEach(btn => {
       const label = btn.getAttribute('data-label');
@@ -497,23 +516,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     document.getElementById('statusBar').textContent = statusText;
     // Menü başlıkları ve butonları
-    const menuMap = {
-      'Dosya': {tr: 'Dosya', en: 'File'},
-      'Yeni': {tr: 'Yeni', en: 'New'},
-      'Kaydet': {tr: 'Kaydet', en: 'Save'},
-      'Farklı Kaydet': {tr: 'Farklı Kaydet', en: 'Save As'},
-      'Aç': {tr: 'Aç', en: 'Open'},
-      'Ekle': {tr: 'Ekle', en: 'Add'},
-      'Küp': {tr: 'Küp', en: 'Cube'},
-      'Küre': {tr: 'Küre', en: 'Sphere'},
-      'Silindir': {tr: 'Silindir', en: 'Cylinder'},
-      'Plane': {tr: 'Plane', en: 'Plane'},
-      'Ayarlar': {tr: 'Ayarlar', en: 'Settings'},
-      'Hakkında': {tr: 'Hakkında', en: 'About'},
-      'Dil': {tr: 'Dil', en: 'Language'},
-      'Türkçe': {tr: 'Türkçe', en: 'Turkish'},
-      'İngilizce': {tr: 'İngilizce', en: 'English'}
-    };
     document.querySelectorAll('#menu button').forEach(btn => {
       const label = btn.getAttribute('data-label');
       if (label && menuMap[label]) {
