@@ -44,6 +44,15 @@ window.addEventListener('keydown', e => {
     if (e.key==='ArrowLeft') selected.userData.rotY -= 5;
     if (e.key==='ArrowRight') selected.userData.rotY += 5;
   }
+  // Del tuşu ile seçili nesneyi sil
+  if (e.key === 'Delete' || e.key === 'Del') {
+    if (selected) {
+      scene.remove(selected);
+      if (selected.userData.outline) scene.remove(selected.userData.outline);
+      objects = objects.filter(obj => obj !== selected);
+      selected = null;
+    }
+  }
 });
 window.addEventListener('keyup', e => {
   if (e.key === 'Shift') isShift = false;
@@ -132,9 +141,15 @@ canvas.addEventListener('contextmenu', (e) => {
   if (intersects.length) {
     // Reset the selected object's position, scale, and rotation
     const obj = intersects[0].object;
-    obj.position.set(0, 0, 0);
+    obj.position.set(0, grid.position.y + 1, 0); // Grid'den 1 birim üstte
     obj.scale.set(1, 1, 1);
-    obj.rotation.set(0, 0, 0);
+    if (obj.geometry && obj.geometry.type === 'PlaneGeometry') {
+      obj.rotation.set(-Math.PI / 2, 0, 0);
+    } else {
+      obj.rotation.set(0, 0, 0);
+    }
+    obj.userData.rotX = 0;
+    obj.userData.rotY = 0;
     if (obj.userData.outline) {
       obj.userData.outline.position.copy(obj.position);
       obj.userData.outline.scale.copy(obj.scale);
@@ -179,13 +194,45 @@ function addShape(type, x, y) {
       geometry,
       new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
     );
+  } else if (type === 'plane') {
+    geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
+    mesh = new THREE.Mesh(
+      geometry,
+      new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
+    );
   }
-  mesh.position.copy(camera.position.clone().setLength(200));
+  // Reset halleriyle başlat
+  mesh.position.set(0, grid.position.y + 1, 0); // Grid'den 1 birim üstte
+  mesh.scale.set(1, 1, 1);
   mesh.userData = {rotX:0, rotY:0};
+  if (type === 'plane') {
+    mesh.rotation.set(-Math.PI / 2, 0, 0); // Plane'i yatay yap
+  } else {
+    mesh.rotation.set(0, 0, 0);
+  }
   scene.add(mesh);
   addOutline(mesh, geometry);
   objects.push(mesh);
   selectObject(mesh);
+}
+
+// Sahneyi JSON olarak kaydeden fonksiyon
+function saveScene(filename) {
+  const arr = objects.map(obj => ({
+    type: obj.geometry.type,
+    position: [obj.position.x, obj.position.y, obj.position.z],
+    scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+    rotX: obj.userData.rotX || 0,
+    rotY: obj.userData.rotY || 0,
+    color: obj.material.color.getHex()
+  }));
+  const blob = new Blob([JSON.stringify(arr, null, 2)], {type: 'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
 }
 
 function selectObject(obj) {
@@ -247,12 +294,12 @@ document.addEventListener('DOMContentLoaded', function() {
   });
 
   document.getElementById('saveBtn').onclick = function() {
-    saveScene('scene.json');
+    saveScene('3D Tasarım - scene.json');
   }
 
   document.getElementById('saveAsBtn').onclick = function() {
-    const name = prompt('Farklı kaydetmek için dosya adı girin:', 'scene.json');
-    if (name) saveScene(name);
+    // Farklı kaydetme kaldırıldı, normal kaydet ile aynı işlemi yapacak
+    saveScene('3D Tasarım - scene.json');
   }
 
   document.getElementById('loadBtn').onclick = function() {
@@ -307,44 +354,84 @@ document.addEventListener('DOMContentLoaded', function() {
     reader.readAsText(file);
   }
 
-  document.getElementById('submenuToggle').onclick = function() {
-    const submenu = document.getElementById('submenu');
-    const addMenu = document.getElementById('addMenu');
-    submenu.style.display = (submenu.style.display === 'none') ? 'block' : 'none';
-    if (submenu.style.display === 'block') addMenu.style.display = 'none';
-  };
-
-  document.getElementById('addMenuToggle').onclick = function() {
-    const addMenu = document.getElementById('addMenu');
-    const submenu = document.getElementById('submenu');
-    addMenu.style.display = (addMenu.style.display === 'none') ? 'block' : 'none';
-    if (addMenu.style.display === 'block') submenu.style.display = 'none';
-  };
-
-  // Add functionality for the 'Hakkında' button
+  // Hakkında butonu
   const aboutBtn = document.getElementById('aboutBtn');
   aboutBtn.onclick = function () {
     const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
     alert(message);
   };
 
-  // Add functionality for language switching
-  let currentLanguage = 'tr'; // Default language is Turkish
-  const languageButtons = document.querySelectorAll('#languageBtn button[data-lang]');
-  languageButtons.forEach(button => {
-    button.onclick = function () {
+  // Cookie'den dil oku, yoksa varsayılanı 'tr' yap
+  function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+  }
+  function setCookie(name, value, days) {
+    let expires = '';
+    if (days) {
+      const date = new Date();
+      date.setTime(date.getTime() + (days*24*60*60*1000));
+      expires = '; expires=' + date.toUTCString();
+    }
+    document.cookie = name + '=' + value + expires + '; path=/';
+  }
+
+  let currentLanguage = getCookie('lang') || 'tr'; // Varsayılan Türkçe
+
+  document.querySelectorAll('#languageBtn ul button[data-lang]').forEach(button => {
+    button.onclick = function (e) {
+      e.stopPropagation();
       currentLanguage = button.dataset.lang;
+      setCookie('lang', currentLanguage, 365);
       updateLanguage();
+      // Menü açıkken de anında güncellensin
+      // Alt menüleri de güncelle
+      document.querySelectorAll('#menu button').forEach(btn => {
+        const label = btn.getAttribute('data-label');
+        if (label && menuMap[label]) {
+          btn.textContent = menuMap[label][currentLanguage];
+        }
+      });
     };
   });
 
   function updateLanguage() {
-    // Update UI elements based on the selected language
+    // Menü ve diğer UI elemanlarını güncelle
     document.getElementById('projectName').textContent = currentLanguage === 'tr' ? '3D Tasarım' : '3D Design';
     document.getElementById('statusBar').textContent = currentLanguage === 'tr' 
-      ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset' 
-      : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset';
+      ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil' 
+      : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete';
+    // Menü başlıkları ve butonları
+    const menuMap = {
+      'Dosya': {tr: 'Dosya', en: 'File'},
+      'Yeni': {tr: 'Yeni', en: 'New'},
+      'Kaydet': {tr: 'Kaydet', en: 'Save'},
+      'Farklı Kaydet': {tr: 'Farklı Kaydet', en: 'Save As'},
+      'Aç': {tr: 'Aç', en: 'Open'},
+      'Ekle': {tr: 'Ekle', en: 'Add'},
+      'Küp': {tr: 'Küp', en: 'Cube'},
+      'Küre': {tr: 'Küre', en: 'Sphere'},
+      'Silindir': {tr: 'Silindir', en: 'Cylinder'},
+      'Plane': {tr: 'Plane', en: 'Plane'},
+      'Ayarlar': {tr: 'Ayarlar', en: 'Settings'},
+      'Hakkında': {tr: 'Hakkında', en: 'About'},
+      'Dil': {tr: 'Dil', en: 'Language'},
+      'Türkçe': {tr: 'Türkçe', en: 'Turkish'},
+      'İngilizce': {tr: 'İngilizce', en: 'English'}
+    };
+    document.querySelectorAll('#menu button').forEach(btn => {
+      const label = btn.getAttribute('data-label');
+      if (label && menuMap[label]) {
+        btn.textContent = menuMap[label][currentLanguage];
+      }
+    });
   }
+
+  // Sayfa yüklendiğinde mevcut dili uygula
+  updateLanguage();
+  setCookie('lang', currentLanguage, 365);
 });
 
 animate();
