@@ -12,13 +12,22 @@ body {
   background: #222;
 }
 #projectName {
-  position: absolute;
-  top: 10px;
-  left: 10px;
-  font-size: 18px;
-  font-weight: bold;
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 40px;
+  background: linear-gradient(90deg, #222 80%, #444 100%);
   color: #fff;
-  z-index: 20;
+  font-size: 20px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  padding-left: 20px;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.4);
+  z-index: 100;
+  letter-spacing: 1px;
+  border-bottom: 1px solid #333;
 }
 #menu {
   position: absolute;
@@ -83,9 +92,9 @@ body {
 
 @media (max-width: 600px) {
   #projectName {
-    font-size: 14px;
-    top: 5px;
-    left: 5px;
+    font-size: 15px;
+    height: 30px;
+    padding-left: 8px;
   }
   #menu {
     top: 35px;

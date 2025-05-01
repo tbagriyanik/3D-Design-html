@@ -19,7 +19,9 @@ const menuMap = {
   'Hakkında': {tr: 'Hakkında', en: 'About'},
   'Dil': {tr: 'Dil', en: 'Language'},
   'Türkçe': {tr: 'Türkçe', en: 'Turkish'},
-  'İngilizce': {tr: 'İngilizce', en: 'English'}
+  'İngilizce': {tr: 'İngilizce', en: 'English'},
+  'Geri Al': {tr: 'Geri Al', en: 'Undo'},
+  'Yinele': {tr: 'Yinele', en: 'Redo'}
 };
 
 // Tüm script kodları buraya taşındı
@@ -48,6 +50,120 @@ let isCtrl = false;
 let cameraOrbit = {rotY: 0, rotX: 0, distance: 400};
 let cameraTargetOrbit = {...cameraOrbit};
 let isCameraDrag = false;
+let currentFileName = '';
+let isDirty = false;
+let selectedFaceNormal = null;
+let isPanning = false;
+let lastPan = null;
+let panOffset = {x: 0, y: 0};
+
+let undoStack = [];
+let redoStack = [];
+
+function saveStateForUndo() {
+  // Sahnenin sadece objelerin temel bilgilerini kaydet
+  const state = objects.map(obj => ({
+    type: obj.geometry.type,
+    position: [obj.position.x, obj.position.y, obj.position.z],
+    scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+    rotX: obj.userData.rotX || 0,
+    rotY: obj.userData.rotY || 0,
+    color: obj.material.color.getHex()
+  }));
+  undoStack.push(JSON.stringify(state));
+  // Undo sonrası yeni işlemde redo stack temizlenir
+  redoStack = [];
+}
+
+function restoreState(stateStr) {
+  try {
+    const arr = JSON.parse(stateStr);
+    for (const obj of objects) {
+      scene.remove(obj);
+      if (obj.userData.outline) scene.remove(obj.userData.outline);
+    }
+    objects = [];
+    for (const item of arr) {
+      let mesh, geometry;
+      const color = new THREE.Color(item.color);
+      if (item.type === 'BoxGeometry') {
+        geometry = new THREE.BoxGeometry(50,50,50);
+        mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+        );
+      } else if (item.type === 'SphereGeometry') {
+        geometry = new THREE.SphereGeometry(30, 32, 24);
+        mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+        );
+      } else if (item.type === 'CylinderGeometry') {
+        geometry = new THREE.CylinderGeometry(25,25,60, 32);
+        mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
+        );
+      } else if (item.type === 'PlaneGeometry') {
+        geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
+        mesh = new THREE.Mesh(
+          geometry,
+          new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
+        );
+      } else {
+        continue;
+      }
+      mesh.position.fromArray(item.position);
+      mesh.scale.fromArray(item.scale);
+      mesh.userData = {rotX: item.rotX, rotY: item.rotY};
+      scene.add(mesh);
+      addOutline(mesh, geometry);
+      objects.push(mesh);
+    }
+    selected = null;
+  } catch(err) { alert('Geri alma/yinele başarısız!'); }
+}
+
+function undo() {
+  if (undoStack.length === 0) return;
+  const currentState = objects.map(obj => ({
+    type: obj.geometry.type,
+    position: [obj.position.x, obj.position.y, obj.position.z],
+    scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+    rotX: obj.userData.rotX || 0,
+    rotY: obj.userData.rotY || 0,
+    color: obj.material.color.getHex()
+  }));
+  redoStack.push(JSON.stringify(currentState));
+  const prevState = undoStack.pop();
+  restoreState(prevState);
+  markDirty();
+}
+
+function redo() {
+  if (redoStack.length === 0) return;
+  saveStateForUndo();
+  const nextState = redoStack.pop();
+  restoreState(nextState);
+  markDirty();
+}
+
+function updateAppTitle() {
+  let title = '3D Tasarım';
+  if (currentFileName) title += ' - ' + currentFileName;
+  if (isDirty) title += ' *';
+  document.getElementById('projectName').textContent = title;
+}
+
+function markDirty() {
+  isDirty = true;
+  updateAppTitle();
+}
+
+function markClean() {
+  isDirty = false;
+  updateAppTitle();
+}
 
 window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth/window.innerHeight;
@@ -58,6 +174,14 @@ window.addEventListener('resize', () => {
 window.addEventListener('keydown', e => {
   if (e.key === 'Shift') isShift = true;
   if (e.key === 'Control') isCtrl = true;
+  if (e.ctrlKey && e.key.toLowerCase() === 'z') {
+    e.preventDefault();
+    undo();
+  }
+  if (e.ctrlKey && e.key.toLowerCase() === 'y') {
+    e.preventDefault();
+    redo();
+  }
   if (!selected) return;
   if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
     if (e.key==='ArrowUp') selected.userData.rotX -= 5;
@@ -68,10 +192,12 @@ window.addEventListener('keydown', e => {
   // Del tuşu ile seçili nesneyi sil
   if (e.key === 'Delete' || e.key === 'Del') {
     if (selected) {
+      saveStateForUndo();
       scene.remove(selected);
       if (selected.userData.outline) scene.remove(selected.userData.outline);
       objects = objects.filter(obj => obj !== selected);
       selected = null;
+      markDirty();
     }
   }
 });
@@ -82,6 +208,13 @@ window.addEventListener('keyup', e => {
 
 const canvas = document.getElementById('scene');
 canvas.addEventListener('mousedown', e => {
+  if (e.button === 1) { // Orta tuş (mouse wheel)
+    isPanning = true;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    e.preventDefault();
+    return;
+  }
   if (e.button !== 0) return;
   const rect = canvas.getBoundingClientRect();
   const mx = ((e.clientX-rect.left)/rect.width)*2-1;
@@ -95,44 +228,97 @@ canvas.addEventListener('mousedown', e => {
     lastX = e.clientX;
     lastY = e.clientY;
     isCameraDrag = false;
+    // Plane için normal artık klasik şekilde alınacak
+    selectedFaceNormal = intersects[0].face ? intersects[0].face.normal.clone() : null;
   } else {
     selectObject(null);
     isCameraDrag = true;
     lastX = e.clientX;
     lastY = e.clientY;
+    selectedFaceNormal = null;
   }
 });
-document.addEventListener('mouseup', ()=> { drag=false; isCameraDrag=false; });
+document.addEventListener('mouseup', ()=> { drag=false; isCameraDrag=false; isPanning=false; });
 document.addEventListener('mousemove', e => {
+  if (isPanning) {
+    const dx = e.clientX - lastX;
+    const dy = e.clientY - lastY;
+    panOffset.x -= dx;
+    panOffset.y += dy;
+    lastX = e.clientX;
+    lastY = e.clientY;
+    return;
+  }
   if (drag && selected) {
+    if (isCtrl || isShift) saveStateForUndo();
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     if (isCtrl) {
-      // Ölçeklendirme: Yatay hareket X, dikey hareket Y ekseninde ölçekler
-      let scaleX = selected.scale.x + dx * 0.01;
-      let scaleY = selected.scale.y - dy * 0.01;
-      scaleX = Math.max(0.1, Math.min(10, scaleX));
-      scaleY = Math.max(0.1, Math.min(10, scaleY));
-      selected.scale.x = scaleX;
-      selected.scale.y = scaleY;
-      selected.scale.z = (scaleX + scaleY) / 2; // Z ekseni ortalama
-      if (selected.userData.outline) {
-        selected.userData.outline.scale.copy(selected.scale);
+      // Plane için sadece X ve Z ekseninde scale
+      if (selected.geometry && selected.geometry.type === 'PlaneGeometry') {
+        let scaleX = selected.scale.x + dx * 0.01;
+        let scaleZ = selected.scale.z + dy * 0.01;
+        scaleX = Math.max(0.1, Math.min(10, scaleX));
+        scaleZ = Math.max(0.1, Math.min(10, scaleZ));
+        selected.scale.x = scaleX;
+        selected.scale.z = scaleZ;
+        if (selected.userData.outline) {
+          selected.userData.outline.scale.copy(selected.scale);
+        }
+      } else if (selectedFaceNormal) {
+        // Normalin en büyük bileşenine göre eksen seç
+        const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
+        let axis = 'x';
+        if (abs.y >= abs.x && abs.y >= abs.z) axis = 'y';
+        else if (abs.z >= abs.x && abs.z >= abs.y) axis = 'z';
+        // Sadece o eksende ölçekle
+        let scaleDelta = (axis === 'y' ? -dy : dx) * 0.01;
+        let newScale = selected.scale[axis] + scaleDelta;
+        newScale = Math.max(0.1, Math.min(10, newScale));
+        selected.scale[axis] = newScale;
+        if (selected.userData.outline) {
+          selected.userData.outline.scale.copy(selected.scale);
+        }
+      } else {
+        // Eski davranış (tüm eksenlerde)
+        let scaleX = selected.scale.x + dx * 0.01;
+        let scaleY = selected.scale.y - dy * 0.01;
+        scaleX = Math.max(0.1, Math.min(10, scaleX));
+        scaleY = Math.max(0.1, Math.min(10, scaleY));
+        selected.scale.x = scaleX;
+        selected.scale.y = scaleY;
+        selected.scale.z = (scaleX + scaleY) / 2;
+        if (selected.userData.outline) {
+          selected.userData.outline.scale.copy(selected.scale);
+        }
       }
     } else if (isShift) {
-      selected.position.x += dx;
-      selected.position.y -= dy;
-      if (selected.userData.outline) {
-        selected.userData.outline.position.copy(selected.position);
+      if (selectedFaceNormal) {
+        const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
+        let axis = 'x';
+        if (abs.y >= abs.x && abs.y >= abs.z) axis = 'y';
+        else if (abs.z >= abs.x && abs.z >= abs.y) axis = 'z';
+        let moveDelta = (axis === 'y' ? -dy : dx);
+        selected.position[axis] += moveDelta;
+        if (selected.userData.outline) {
+          selected.userData.outline.position.copy(selected.position);
+        }
+      } else {
+        selected.position.x += dx;
+        selected.position.y -= dy;
+        if (selected.userData.outline) {
+          selected.userData.outline.position.copy(selected.position);
+        }
       }
     } else {
-      // Dönüş hızı
+      // Plane için de klasik döndürme (tüm açılarda)
       const speed = 0.5;
       selected.userData.rotY += dx * speed;
       selected.userData.rotX += dy * speed;
     }
     lastX = e.clientX;
     lastY = e.clientY;
+    markDirty();
   } else if (isCameraDrag) {
     // Kamera döndürme
     const dx = e.clientX - lastX;
@@ -147,14 +333,15 @@ document.addEventListener('mousemove', e => {
 canvas.addEventListener('wheel', e => {
   cameraTargetOrbit.distance += e.deltaY * 0.5;
   cameraTargetOrbit.distance = Math.max(100, Math.min(1000, cameraTargetOrbit.distance));
-}, { passive: true });
+  e.preventDefault();
+}, { passive: false });
 
 canvas.addEventListener('contextmenu', (e) => {
   e.preventDefault(); // Prevent the default context menu
 
   const rect = canvas.getBoundingClientRect();
-  const mx = ((e.clientX - rect.left) / rect.width) * 2 - 1;
-  const my = -(((e.clientY - rect.top) / rect.height) * 2 - 1);
+  const mx = ((e.clientX - rect.left) / rect.width) *2 - 1;
+  const my = -(((e.clientY - rect.top) / rect.height) *2 - 1);
   const ray = new THREE.Raycaster();
   ray.setFromCamera({ x: mx, y: my }, camera);
   const intersects = ray.intersectObjects(objects);
@@ -179,6 +366,7 @@ canvas.addEventListener('contextmenu', (e) => {
   } else {
     // Reset the camera's position and orientation
     cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
+    panOffset = {x: 0, y: 0};
   }
 });
 
@@ -199,42 +387,100 @@ canvas.addEventListener('touchstart', e => {
       lastTouchX = touch.clientX;
       lastTouchY = touch.clientY;
       isCameraDrag = false;
+      // Plane için normal artık klasik şekilde alınacak
+      selectedFaceNormal = intersects[0].face ? intersects[0].face.normal.clone() : null;
     } else {
       selectObject(null);
       isCameraDrag = true;
       lastTouchX = touch.clientX;
       lastTouchY = touch.clientY;
+      selectedFaceNormal = null;
     }
   }
 }, { passive: false });
 canvas.addEventListener('touchmove', e => {
+  if (e.touches.length === 2) {
+    const t1 = e.touches[0];
+    const t2 = e.touches[1];
+    const mx = (t1.clientX + t2.clientX) / 2;
+    const my = (t1.clientY + t2.clientY) / 2;
+    if (!lastPan) lastPan = {x: mx, y: my};
+    const dx = mx - lastPan.x;
+    const dy = my - lastPan.y;
+    panOffset.x -= dx;
+    panOffset.y += dy;
+    lastPan = {x: mx, y: my};
+    e.preventDefault();
+    return;
+  } else {
+    lastPan = null;
+  }
   if (e.touches.length === 1) {
     const touch = e.touches[0];
     const dx = touch.clientX - lastTouchX;
     const dy = touch.clientY - lastTouchY;
     if (drag && selected) {
+      if (isCtrl || isShift) saveStateForUndo();
       if (isCtrl) {
-        let scaleX = selected.scale.x + dx * 0.01;
-        let scaleY = selected.scale.y - dy * 0.01;
-        scaleX = Math.max(0.1, Math.min(10, scaleX));
-        scaleY = Math.max(0.1, Math.min(10, scaleY));
-        selected.scale.x = scaleX;
-        selected.scale.y = scaleY;
-        selected.scale.z = (scaleX + scaleY) / 2;
-        if (selected.userData.outline) {
-          selected.userData.outline.scale.copy(selected.scale);
+        if (selected.geometry && selected.geometry.type === 'PlaneGeometry') {
+          let scaleX = selected.scale.x + dx * 0.01;
+          let scaleZ = selected.scale.z + dy * 0.01;
+          scaleX = Math.max(0.1, Math.min(10, scaleX));
+          scaleZ = Math.max(0.1, Math.min(10, scaleZ));
+          selected.scale.x = scaleX;
+          selected.scale.z = scaleZ;
+          if (selected.userData.outline) {
+            selected.userData.outline.scale.copy(selected.scale);
+          }
+        } else if (selectedFaceNormal) {
+          const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
+          let axis = 'x';
+          if (abs.y >= abs.x && abs.y >= abs.z) axis = 'y';
+          else if (abs.z >= abs.x && abs.z >= abs.y) axis = 'z';
+          let scaleDelta = (axis === 'y' ? -dy : dx) * 0.01;
+          let newScale = selected.scale[axis] + scaleDelta;
+          newScale = Math.max(0.1, Math.min(10, newScale));
+          selected.scale[axis] = newScale;
+          if (selected.userData.outline) {
+            selected.userData.outline.scale.copy(selected.scale);
+          }
+        } else {
+          let scaleX = selected.scale.x + dx * 0.01;
+          let scaleY = selected.scale.y - dy * 0.01;
+          scaleX = Math.max(0.1, Math.min(10, scaleX));
+          scaleY = Math.max(0.1, Math.min(10, scaleY));
+          selected.scale.x = scaleX;
+          selected.scale.y = scaleY;
+          selected.scale.z = (scaleX + scaleY) / 2;
+          if (selected.userData.outline) {
+            selected.userData.outline.scale.copy(selected.scale);
+          }
         }
       } else if (isShift) {
-        selected.position.x += dx;
-        selected.position.y -= dy;
-        if (selected.userData.outline) {
-          selected.userData.outline.position.copy(selected.position);
+        if (selectedFaceNormal) {
+          const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
+          let axis = 'x';
+          if (abs.y >= abs.x && abs.y >= abs.z) axis = 'y';
+          else if (abs.z >= abs.x && abs.z >= abs.y) axis = 'z';
+          let moveDelta = (axis === 'y' ? -dy : dx);
+          selected.position[axis] += moveDelta;
+          if (selected.userData.outline) {
+            selected.userData.outline.position.copy(selected.position);
+          }
+        } else {
+          selected.position.x += dx;
+          selected.position.y -= dy;
+          if (selected.userData.outline) {
+            selected.userData.outline.position.copy(selected.position);
+          }
         }
       } else {
+        // Plane için de klasik döndürme (tüm açılarda)
         const speed = 0.5;
         selected.userData.rotY += dx * speed;
         selected.userData.rotX += dy * speed;
       }
+      markDirty();
     } else if (isCameraDrag) {
       cameraTargetOrbit.rotY += dx * 0.5;
       cameraTargetOrbit.rotX += dy * 0.5;
@@ -252,10 +498,12 @@ canvas.addEventListener('touchend', e => {
   const now = Date.now();
   if (e.touches.length === 0 && selected) {
     if (now - lastTap < 400) { // 400ms içinde iki kez dokunursa sil
+      saveStateForUndo();
       scene.remove(selected);
       if (selected.userData.outline) scene.remove(selected.userData.outline);
       objects = objects.filter(obj => obj !== selected);
       selected = null;
+      markDirty();
     }
     lastTap = now;
   }
@@ -275,6 +523,7 @@ function addOutline(mesh, geometry) {
 }
 
 function addShape(type, x, y) {
+  saveStateForUndo();
   let mesh;
   let geometry;
   const color = new THREE.Color(Math.random(), Math.random(), Math.random());
@@ -316,6 +565,7 @@ function addShape(type, x, y) {
   addOutline(mesh, geometry);
   objects.push(mesh);
   selectObject(mesh);
+  markDirty();
 }
 
 // Sahneyi JSON olarak kaydeden fonksiyon
@@ -354,10 +604,10 @@ function animate() {
   // Kamera pozisyonunu güncelle
   const phi = THREE.MathUtils.degToRad(90 - cameraOrbit.rotX);
   const theta = THREE.MathUtils.degToRad(cameraOrbit.rotY);
-  camera.position.x = cameraOrbit.distance * Math.sin(phi) * Math.sin(theta);
-  camera.position.y = cameraOrbit.distance * Math.cos(phi);
+  camera.position.x = cameraOrbit.distance * Math.sin(phi) * Math.sin(theta) + panOffset.x;
+  camera.position.y = cameraOrbit.distance * Math.cos(phi) + panOffset.y;
   camera.position.z = cameraOrbit.distance * Math.sin(phi) * Math.cos(theta);
-  camera.lookAt(0,0,0);
+  camera.lookAt(panOffset.x, panOffset.y, 0);
   for (const obj of objects) {
     obj.rotation.x = THREE.MathUtils.degToRad(obj.userData.rotX||0);
     obj.rotation.y = THREE.MathUtils.degToRad(obj.userData.rotY||0);
@@ -386,6 +636,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
   // Dosya menüsü işlemleri
   document.getElementById('newBtn').addEventListener('click', () => {
+    saveStateForUndo();
     // Tüm nesneleri temizle
     for (const obj of objects) {
       scene.remove(obj);
@@ -393,15 +644,25 @@ document.addEventListener('DOMContentLoaded', function() {
     }
     objects = [];
     selected = null;
+    currentFileName = '';
+    markClean();
+    cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
+    panOffset = { x: 0, y: 0 };
   });
 
   document.getElementById('saveBtn').onclick = function() {
-    saveScene('3D Tasarım - scene.json');
+    let fileName = currentFileName || 'scene.json';
+    saveScene(fileName);
+    markClean();
   }
 
   document.getElementById('saveAsBtn').onclick = function() {
-    // Farklı kaydetme kaldırıldı, normal kaydet ile aynı işlemi yapacak
-    saveScene('3D Tasarım - scene.json');
+    let fileName = prompt('Dosya adı:', currentFileName || 'scene.json');
+    if (fileName) {
+      currentFileName = fileName;
+      saveScene(fileName);
+      markClean();
+    }
   }
 
   document.getElementById('loadBtn').onclick = function() {
@@ -411,6 +672,8 @@ document.addEventListener('DOMContentLoaded', function() {
   document.getElementById('fileInput').onchange = function(e) {
     const file = e.target.files[0];
     if (!file) return;
+    currentFileName = file.name;
+    markClean();
     const reader = new FileReader();
     reader.onload = function(ev) {
       try {
@@ -441,20 +704,32 @@ document.addEventListener('DOMContentLoaded', function() {
               geometry,
               new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
             );
+          } else if (item.type === 'PlaneGeometry') {
+            geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
+            mesh = new THREE.Mesh(
+              geometry,
+              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
+            );
           } else {
             continue;
           }
           mesh.position.fromArray(item.position);
-          mesh.scale.fromArray(item.scale); // Load scale information
+          mesh.scale.fromArray(item.scale);
           mesh.userData = {rotX: item.rotX, rotY: item.rotY};
           scene.add(mesh);
           addOutline(mesh, geometry);
           objects.push(mesh);
         }
+        cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
+        panOffset = { x: 0, y: 0 };
       } catch(err) { alert('Dosya okunamadı!'); }
     }
     reader.readAsText(file);
   }
+
+  // Undo/redo butonları
+  document.getElementById('undoBtn').onclick = undo;
+  document.getElementById('redoBtn').onclick = redo;
 
   // Hakkında butonu
   const aboutBtn = document.getElementById('aboutBtn');
@@ -482,37 +757,32 @@ document.addEventListener('DOMContentLoaded', function() {
 
   let currentLanguage = getCookie('lang') || 'tr'; // Varsayılan Türkçe
 
-  // Tek tek dil butonlarına onclick ekle
+  // Dil butonları için id ile seçim (mobilde de çalışır)
   const trBtn = document.getElementById('trDil');
   const enBtn = document.getElementById('engDil');
   function handleLanguageClick(lang) {
     currentLanguage = lang;
-    setCookie('lang', currentLanguage, 365);    
+    setCookie('lang', currentLanguage, 365);
     updateLanguage();
-    document.querySelectorAll('#menu button').forEach(btn => {
-      const label = btn.getAttribute('data-label');
-      if (label && menuMap[label]) {
-        btn.textContent = menuMap[label][currentLanguage];
-      }
-    });
   }
   if (trBtn) trBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('tr'); };
   if (enBtn) enBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('en'); };
 
   function updateLanguage() {
     // Menü ve diğer UI elemanlarını güncelle
-    document.getElementById('projectName').textContent = currentLanguage === 'tr' ? '3D Tasarım' : '3D Design';
+    // Başlık
+    updateAppTitle();
     // Mobil mi kontrolü
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     let statusText = '';
     if (isMobile) {
       statusText = currentLanguage === 'tr'
-        ? 'Kısayollar: [Tek Dokun] Seç/Sürükle | [Çift Dokun] Sil | [İki Parmak] Kamera'
-        : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera';
+        ? 'Kısayollar: [Tek Dokun] Seç/Sürükle | [Çift Dokun] Sil | [İki Parmak] Kamera | [İki Parmak Sürükle] Pan | [Uzun Bas] Menü'
+        : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera | [Two Fingers Drag] Pan | [Long Press] Menu';
     } else {
       statusText = currentLanguage === 'tr'
-        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil'
-        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete';
+        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil | [Orta Tık] Pan | [Ctrl+Z] Geri Al | [Ctrl+Y] Yinele'
+        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
     }
     document.getElementById('statusBar').textContent = statusText;
     // Menü başlıkları ve butonları
