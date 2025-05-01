@@ -3,7 +3,7 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.m
 // Debug message to confirm script execution
 console.log('main.js is loaded and running.');
 
-// Menü başlıkları ve butonları haritası (global scope)
+// Menu titles and buttons map (global scope)
 const menuMap = {
   'Dosya': {tr: 'Dosya', en: 'File'},
   'Yeni': {tr: 'Yeni', en: 'New'},
@@ -24,7 +24,7 @@ const menuMap = {
   'Yinele': {tr: 'Yinele', en: 'Redo'}
 };
 
-// Tüm script kodları buraya taşındı
+// All script code moved here
 let scene = new THREE.Scene();
 let camera = new THREE.PerspectiveCamera(60, window.innerWidth/window.innerHeight, 1, 2000);
 let renderer = new THREE.WebGLRenderer({canvas: document.getElementById('scene'), antialias:true});
@@ -60,8 +60,8 @@ let panOffset = {x: 0, y: 0};
 let undoStack = [];
 let redoStack = [];
 
+// Undo/redo stack'lerine maksimum boyut sınırı ekle
 function saveStateForUndo() {
-  // Sahnenin sadece objelerin temel bilgilerini kaydet
   const state = objects.map(obj => ({
     type: obj.geometry.type,
     position: [obj.position.x, obj.position.y, obj.position.z],
@@ -71,7 +71,7 @@ function saveStateForUndo() {
     color: obj.material.color.getHex()
   }));
   undoStack.push(JSON.stringify(state));
-  // Undo sonrası yeni işlemde redo stack temizlenir
+  if (undoStack.length > 50) undoStack.shift(); // Maksimum 50 adım
   redoStack = [];
 }
 
@@ -121,7 +121,7 @@ function restoreState(stateStr) {
       objects.push(mesh);
     }
     selected = null;
-  } catch(err) { alert('Geri alma/yinele başarısız!'); }
+  } catch(err) { alert('Undo/redo failed!'); }
 }
 
 function undo() {
@@ -148,11 +148,13 @@ function redo() {
   markDirty();
 }
 
+// <title> etiketini güncelle
 function updateAppTitle() {
-  let title = '3D Tasarım';
+  let title = '3D Design';
   if (currentFileName) title += ' - ' + currentFileName;
   if (isDirty) title += ' *';
   document.getElementById('projectName').textContent = title;
+  document.title = title;
 }
 
 function markDirty() {
@@ -189,7 +191,7 @@ window.addEventListener('keydown', e => {
     if (e.key==='ArrowLeft') selected.userData.rotY -= 5;
     if (e.key==='ArrowRight') selected.userData.rotY += 5;
   }
-  // Del tuşu ile seçili nesneyi sil
+  // Delete key to remove selected object
   if (e.key === 'Delete' || e.key === 'Del') {
     if (selected) {
       saveStateForUndo();
@@ -208,7 +210,7 @@ window.addEventListener('keyup', e => {
 
 const canvas = document.getElementById('scene');
 canvas.addEventListener('mousedown', e => {
-  if (e.button === 1) { // Orta tuş (mouse wheel)
+  if (e.button === 1) { // Middle button (mouse wheel)
     isPanning = true;
     lastX = e.clientX;
     lastY = e.clientY;
@@ -228,7 +230,7 @@ canvas.addEventListener('mousedown', e => {
     lastX = e.clientX;
     lastY = e.clientY;
     isCameraDrag = false;
-    // Plane için normal artık klasik şekilde alınacak
+    // For Plane, normal will now be taken in the classic way
     selectedFaceNormal = intersects[0].face ? intersects[0].face.normal.clone() : null;
   } else {
     selectObject(null);
@@ -254,7 +256,7 @@ document.addEventListener('mousemove', e => {
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     if (isCtrl) {
-      // Plane için sadece X ve Z ekseninde scale
+      // For Plane, scale only in X and Z axes
       if (selected.geometry && selected.geometry.type === 'PlaneGeometry') {
         let scaleX = selected.scale.x + dx * 0.01;
         let scaleZ = selected.scale.z + dy * 0.01;
@@ -266,12 +268,12 @@ document.addEventListener('mousemove', e => {
           selected.userData.outline.scale.copy(selected.scale);
         }
       } else if (selectedFaceNormal) {
-        // Normalin en büyük bileşenine göre eksen seç
+        // Choose axis based on the largest component of the normal
         const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
         let axis = 'x';
         if (abs.y >= abs.x && abs.y >= abs.z) axis = 'y';
         else if (abs.z >= abs.x && abs.z >= abs.y) axis = 'z';
-        // Sadece o eksende ölçekle
+        // Scale only on that axis
         let scaleDelta = (axis === 'y' ? -dy : dx) * 0.01;
         let newScale = selected.scale[axis] + scaleDelta;
         newScale = Math.max(0.1, Math.min(10, newScale));
@@ -280,7 +282,7 @@ document.addEventListener('mousemove', e => {
           selected.userData.outline.scale.copy(selected.scale);
         }
       } else {
-        // Eski davranış (tüm eksenlerde)
+        // Old behavior (scale on all axes)
         let scaleX = selected.scale.x + dx * 0.01;
         let scaleY = selected.scale.y - dy * 0.01;
         scaleX = Math.max(0.1, Math.min(10, scaleX));
@@ -311,7 +313,7 @@ document.addEventListener('mousemove', e => {
         }
       }
     } else {
-      // Plane için de klasik döndürme (tüm açılarda)
+      // For Plane, classic rotation (all angles)
       const speed = 0.5;
       selected.userData.rotY += dx * speed;
       selected.userData.rotX += dy * speed;
@@ -320,7 +322,7 @@ document.addEventListener('mousemove', e => {
     lastY = e.clientY;
     markDirty();
   } else if (isCameraDrag) {
-    // Kamera döndürme
+    // Camera rotation
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
     cameraTargetOrbit.rotY += dx * 0.5;
@@ -349,7 +351,7 @@ canvas.addEventListener('contextmenu', (e) => {
   if (intersects.length) {
     // Reset the selected object's position, scale, and rotation
     const obj = intersects[0].object;
-    obj.position.set(0, grid.position.y + 1, 0); // Grid'den 1 birim üstte
+    obj.position.set(0, grid.position.y + 1, 0); // 1 unit above the grid
     obj.scale.set(1, 1, 1);
     if (obj.geometry && obj.geometry.type === 'PlaneGeometry') {
       obj.rotation.set(-Math.PI / 2, 0, 0);
@@ -370,7 +372,7 @@ canvas.addEventListener('contextmenu', (e) => {
   }
 });
 
-// Touch event desteği (mobil uyumluluk)
+// Touch event support (mobile compatibility)
 let lastTouchX = 0, lastTouchY = 0;
 canvas.addEventListener('touchstart', e => {
   if (e.touches.length === 1) {
@@ -387,7 +389,7 @@ canvas.addEventListener('touchstart', e => {
       lastTouchX = touch.clientX;
       lastTouchY = touch.clientY;
       isCameraDrag = false;
-      // Plane için normal artık klasik şekilde alınacak
+      // For Plane, normal will now be taken in the classic way
       selectedFaceNormal = intersects[0].face ? intersects[0].face.normal.clone() : null;
     } else {
       selectObject(null);
@@ -475,7 +477,7 @@ canvas.addEventListener('touchmove', e => {
           }
         }
       } else {
-        // Plane için de klasik döndürme (tüm açılarda)
+        // For Plane, classic rotation (all angles)
         const speed = 0.5;
         selected.userData.rotY += dx * speed;
         selected.userData.rotX += dy * speed;
@@ -492,12 +494,12 @@ canvas.addEventListener('touchmove', e => {
   }
 }, { passive: false });
 
-// Mobilde çift dokunma ile nesne silme
+// Double tap on mobile to delete object
 let lastTap = 0;
 canvas.addEventListener('touchend', e => {
   const now = Date.now();
   if (e.touches.length === 0 && selected) {
-    if (now - lastTap < 400) { // 400ms içinde iki kez dokunursa sil
+    if (now - lastTap < 400) { // Delete if tapped twice within 400ms
       saveStateForUndo();
       scene.remove(selected);
       if (selected.userData.outline) scene.remove(selected.userData.outline);
@@ -552,12 +554,12 @@ function addShape(type, x, y) {
       new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
     );
   }
-  // Reset halleriyle başlat
-  mesh.position.set(0, grid.position.y + 1, 0); // Grid'den 1 birim üstte
+  // Start with reset states
+  mesh.position.set(0, grid.position.y + 1, 0); // 1 unit above the grid
   mesh.scale.set(1, 1, 1);
   mesh.userData = {rotX:0, rotY:0};
   if (type === 'plane') {
-    mesh.rotation.set(-Math.PI / 2, 0, 0); // Plane'i yatay yap
+    mesh.rotation.set(-Math.PI / 2, 0, 0); // Make Plane horizontal
   } else {
     mesh.rotation.set(0, 0, 0);
   }
@@ -568,7 +570,7 @@ function addShape(type, x, y) {
   markDirty();
 }
 
-// Sahneyi JSON olarak kaydeden fonksiyon
+// Function to save the scene as JSON
 function saveScene(filename) {
   const arr = objects.map(obj => ({
     type: obj.geometry.type,
@@ -596,12 +598,12 @@ function selectObject(obj) {
 }
 
 function animate() {
-  // Kamera smooth hareket
+  // Smooth camera movement
   cameraOrbit.rotY += (cameraTargetOrbit.rotY - cameraOrbit.rotY) * 0.15;
   cameraOrbit.rotX += (cameraTargetOrbit.rotX - cameraOrbit.rotX) * 0.15;
   cameraOrbit.distance += (cameraTargetOrbit.distance - cameraOrbit.distance) * 0.15;
 
-  // Kamera pozisyonunu güncelle
+  // Update camera position
   const phi = THREE.MathUtils.degToRad(90 - cameraOrbit.rotX);
   const theta = THREE.MathUtils.degToRad(cameraOrbit.rotY);
   camera.position.x = cameraOrbit.distance * Math.sin(phi) * Math.sin(theta) + panOffset.x;
@@ -629,15 +631,25 @@ function animate() {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-  // Menü işlevselliği için event listener'ları güncelle
+  // Update event listeners for menu functionality
   document.querySelectorAll('#menu button[data-shape]').forEach(btn => {
     btn.addEventListener('click', () => addShape(btn.dataset.shape));
   });
 
-  // Dosya menüsü işlemleri
+  // File menu operations
+  let confirmOnChange = () => {
+    if (isDirty) {
+      return confirm(currentLanguage === 'tr' ? 'Kaydedilmemiş değişiklikler var. Devam etmek istediğinize emin misiniz?' : 'You have unsaved changes. Are you sure you want to continue?');
+    }
+    return true;
+  };
+
   document.getElementById('newBtn').addEventListener('click', () => {
+    if (!confirmOnChange()) return;
+    undoStack = [];
+    redoStack = [];
     saveStateForUndo();
-    // Tüm nesneleri temizle
+    // Clear all objects
     for (const obj of objects) {
       scene.remove(obj);
       if (obj.userData.outline) scene.remove(obj.userData.outline);
@@ -657,7 +669,7 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   document.getElementById('saveAsBtn').onclick = function() {
-    let fileName = prompt('Dosya adı:', currentFileName || 'scene.json');
+    let fileName = prompt('File name:', currentFileName || 'scene.json');
     if (fileName) {
       currentFileName = fileName;
       saveScene(fileName);
@@ -666,10 +678,13 @@ document.addEventListener('DOMContentLoaded', function() {
   }
 
   document.getElementById('loadBtn').onclick = function() {
+    if (!confirmOnChange()) return;
     document.getElementById('fileInput').click();
   }
 
   document.getElementById('fileInput').onchange = function(e) {
+    undoStack = [];
+    redoStack = [];
     const file = e.target.files[0];
     if (!file) return;
     currentFileName = file.name;
@@ -722,23 +737,23 @@ document.addEventListener('DOMContentLoaded', function() {
         }
         cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
         panOffset = { x: 0, y: 0 };
-      } catch(err) { alert('Dosya okunamadı!'); }
+      } catch(err) { alert(currentLanguage === 'tr' ? 'Dosya okunamadı veya bozuk!' : 'File could not be read or is corrupted!'); }
     }
     reader.readAsText(file);
   }
 
-  // Undo/redo butonları
+  // Undo/redo buttons
   document.getElementById('undoBtn').onclick = undo;
   document.getElementById('redoBtn').onclick = redo;
 
-  // Hakkında butonu
+  // About button
   const aboutBtn = document.getElementById('aboutBtn');
   aboutBtn.onclick = function () {
     const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
     alert(message);
   };
 
-  // Cookie'den dil oku, yoksa varsayılanı 'tr' yap
+  // Read language from cookie, default to 'tr' if not set
   function getCookie(name) {
     const value = `; ${document.cookie}`;
     const parts = value.split(`; ${name}=`);
@@ -755,9 +770,9 @@ document.addEventListener('DOMContentLoaded', function() {
     document.cookie = name + '=' + value + expires + '; path=/';
   }
 
-  let currentLanguage = getCookie('lang') || 'tr'; // Varsayılan Türkçe
+  let currentLanguage = getCookie('lang') || 'tr'; // Default to Turkish
 
-  // Dil butonları için id ile seçim (mobilde de çalışır)
+  // Language buttons by id (works on mobile too)
   const trBtn = document.getElementById('trDil');
   const enBtn = document.getElementById('engDil');
   function handleLanguageClick(lang) {
@@ -769,10 +784,10 @@ document.addEventListener('DOMContentLoaded', function() {
   if (enBtn) enBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('en'); };
 
   function updateLanguage() {
-    // Menü ve diğer UI elemanlarını güncelle
-    // Başlık
+    // Update menu and other UI elements
+    // Title
     updateAppTitle();
-    // Mobil mi kontrolü
+    // Check if mobile
     const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
     let statusText = '';
     if (isMobile) {
@@ -785,7 +800,7 @@ document.addEventListener('DOMContentLoaded', function() {
         : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
     }
     document.getElementById('statusBar').textContent = statusText;
-    // Menü başlıkları ve butonları
+    // Menu titles and buttons
     document.querySelectorAll('#menu button').forEach(btn => {
       const label = btn.getAttribute('data-label');
       if (label && menuMap[label]) {
@@ -794,7 +809,7 @@ document.addEventListener('DOMContentLoaded', function() {
     });
   }
 
-  // Sayfa yüklendiğinde mevcut dili uygula
+  // Apply current language on page load
   updateLanguage();
   setCookie('lang', currentLanguage, 365);
 });
