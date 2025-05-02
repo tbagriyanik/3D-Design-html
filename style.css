@@ -96,6 +96,48 @@ button:focus {
   box-shadow: 0 -2px 8px rgba(0, 0, 0, 0.5);
 }
 
+/* Theme Styles */
+body.dark {
+    background: #1a2233;
+    color: #ffffff;
+}
+
+body.dark #menu ul {
+    background: rgba(20, 20, 30, 0.9);
+}
+
+body.dark #menu button {
+    color: #ffffff;
+}
+
+body.dark #statusBar {
+    background: rgba(20, 20, 30, 0.9);
+    color: #ffffff;
+}
+
+body.light {
+    background: #ffffff;
+    color: #000000;
+}
+
+body.light #menu ul {
+    background: rgba(240, 240, 240, 0.9);
+}
+
+body.light #menu button {
+    color: #000000;
+}
+
+body.light #statusBar {
+    background: rgba(240, 240, 240, 0.9);
+    color: #000000;
+}
+
+/* Smooth transitions for theme changes */
+body, #menu ul, #menu button, #statusBar {
+    transition: background-color 0.3s, color 0.3s;
+}
+
 @media (max-width: 600px) {
   #projectName {
     font-size: 15px;

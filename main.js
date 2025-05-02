@@ -1,8 +1,5 @@
 import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.module.js';
 
-// Debug message to confirm script execution
-console.log('main.js is loaded and running.');
-
 // Menu titles and buttons map (global scope)
 const menuMap = {
   'Dosya': {tr: 'Dosya', en: 'File'},
@@ -17,12 +14,90 @@ const menuMap = {
   'Plane': {tr: 'Plane', en: 'Plane'},
   'Ayarlar': {tr: 'Ayarlar', en: 'Settings'},
   'Hakkında': {tr: 'Hakkında', en: 'About'},
-  'Dil': {tr: 'Dil', en: 'Language'},
+  'Dil': {tr: 'Dil >', en: 'Language >'},
   'Türkçe': {tr: 'Türkçe', en: 'Turkish'},
   'İngilizce': {tr: 'İngilizce', en: 'English'},
   'Geri Al': {tr: 'Geri Al', en: 'Undo'},
-  'Yinele': {tr: 'Yinele', en: 'Redo'}
+  'Yinele': {tr: 'Yinele', en: 'Redo'},
+  'Tema': {tr: 'Tema >', en: 'Theme >'},
+  'Koyu': {tr: 'Koyu', en: 'Dark'},
+  'Açık': {tr: 'Açık', en: 'Light'}
 };
+
+// Function to handle cookie operations
+function setCookie(name, value, days) {
+    let expires = '';
+    if (days) {
+        const date = new Date();
+        date.setTime(date.getTime() + (days * 24 * 60 * 60 * 1000));
+        expires = '; expires=' + date.toUTCString();
+    }
+    document.cookie = name + '=' + value + expires + '; path=/';
+}
+
+function getCookie(name) {
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+    return null;
+}
+
+// Read language from cookie, default to 'tr' if not set
+globalThis.currentLanguage = getCookie('lang') || 'tr'; // Default to Turkish
+
+function updateLanguage() {
+    // Update menu and other UI elements
+    // Title
+    updateAppTitle();
+    // Check if mobile
+    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+    let statusText = '';
+    if (isMobile) {
+      statusText = currentLanguage === 'tr'
+        ? 'Kısayollar: [Tek Dokun] Seç/Sürükle | [Çift Dokun] Sil | [İki Parmak] Kamera | [İki Parmak Sürükle] Pan | [Uzun Bas] Menü'
+        : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera | [Two Fingers Drag] Pan | [Long Press] Menu';
+    } else {
+      statusText = currentLanguage === 'tr'
+        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil | [Orta Tık] Pan | [Ctrl+Z] Geri Al | [Ctrl+Y] Yinele'
+        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
+    }
+    document.getElementById('statusBar').textContent = statusText;
+    // Menu titles and buttons
+    document.querySelectorAll('#menu button').forEach(btn => {
+      const label = btn.getAttribute('data-label');
+      if (label && menuMap[label]) {
+        btn.textContent = menuMap[label][currentLanguage];
+      }
+    });
+
+    // Update theme buttons
+    const darkThemeBtn = document.getElementById('darkTema');
+    const lightThemeBtn = document.getElementById('lightTema');
+    if (darkThemeBtn) {
+        darkThemeBtn.textContent = menuMap['Koyu'][currentLanguage];
+    }
+    if (lightThemeBtn) {
+        lightThemeBtn.textContent = menuMap['Açık'][currentLanguage];
+    }
+}
+
+// Theme handling
+function setTheme(theme) {
+    document.body.className = theme;
+    setCookie('theme', theme, 365);
+    
+    if (theme === 'dark') {
+        renderer.setClearColor(0x1a2233);
+        grid.material.color.setHex(0xffffff);
+    } else {
+        renderer.setClearColor(0xf0f0f0);
+        grid.material.color.setHex(0x666666); // Daha koyu gri renk
+    }
+}
+
+// Apply saved theme on page load
+const savedTheme = getCookie('theme') || 'dark';
+document.body.className = savedTheme;
 
 // All script code moved here
 let scene = new THREE.Scene();
@@ -56,6 +131,8 @@ let selectedFaceNormal = null;
 let isPanning = false;
 let lastPan = null;
 let panOffset = {x: 0, y: 0};
+const PAN_SMOOTHNESS = 0.08; // Increased from 0.02 for faster pan movement
+let targetPanOffset = { x: 0, y: 0 };
 
 let undoStack = [];
 let redoStack = [];
@@ -245,8 +322,8 @@ document.addEventListener('mousemove', e => {
   if (isPanning) {
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
-    panOffset.x -= dx;
-    panOffset.y += dy;
+    targetPanOffset.x -= dx * 1.0; // Increased from 0.5
+    targetPanOffset.y += dy * 1.0; // Increased from 0.5
     lastX = e.clientX;
     lastY = e.clientY;
     return;
@@ -368,7 +445,7 @@ canvas.addEventListener('contextmenu', (e) => {
   } else {
     // Reset the camera's position and orientation
     cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
-    panOffset = {x: 0, y: 0};
+    targetPanOffset = {x: 0, y: 0};
   }
 });
 
@@ -409,8 +486,8 @@ canvas.addEventListener('touchmove', e => {
     if (!lastPan) lastPan = {x: mx, y: my};
     const dx = mx - lastPan.x;
     const dy = my - lastPan.y;
-    panOffset.x -= dx;
-    panOffset.y += dy;
+    targetPanOffset.x -= dx;
+    targetPanOffset.y += dy;
     lastPan = {x: mx, y: my};
     e.preventDefault();
     return;
@@ -603,7 +680,11 @@ function animate() {
   cameraOrbit.rotX += (cameraTargetOrbit.rotX - cameraOrbit.rotX) * 0.15;
   cameraOrbit.distance += (cameraTargetOrbit.distance - cameraOrbit.distance) * 0.15;
 
-  // Update camera position
+  // Extra smooth pan movement
+  panOffset.x += (targetPanOffset.x - panOffset.x) * PAN_SMOOTHNESS;
+  panOffset.y += (targetPanOffset.y - panOffset.y) * PAN_SMOOTHNESS;
+
+  // Update camera position with smooth pan
   const phi = THREE.MathUtils.degToRad(90 - cameraOrbit.rotX);
   const theta = THREE.MathUtils.degToRad(cameraOrbit.rotY);
   camera.position.x = cameraOrbit.distance * Math.sin(phi) * Math.sin(theta) + panOffset.x;
@@ -630,188 +711,158 @@ function animate() {
   requestAnimationFrame(animate);
 }
 
-document.addEventListener('DOMContentLoaded', function() {
-  // Update event listeners for menu functionality
-  document.querySelectorAll('#menu button[data-shape]').forEach(btn => {
-    btn.addEventListener('click', () => addShape(btn.dataset.shape));
-  });
+// Event delegation for menu buttons
+document.getElementById('menu').addEventListener('click', (e) => {
+    const shapeBtn = e.target.closest('button[data-shape]');
+    if (shapeBtn) {
+        addShape(shapeBtn.dataset.shape);
+        return;
+    }
+});
 
-  // File menu operations
-  let confirmOnChange = () => {
+// File menu operations
+const confirmOnChange = () => {
     if (isDirty) {
-      return confirm(currentLanguage === 'tr' ? 'Kaydedilmemiş değişiklikler var. Devam etmek istediğinize emin misiniz?' : 'You have unsaved changes. Are you sure you want to continue?');
+        return confirm(currentLanguage === 'tr' ? 'Kaydedilmemiş değişiklikler var. Devam etmek istediğinize emin misiniz?' : 'You have unsaved changes. Are you sure you want to continue?');
     }
     return true;
-  };
+};
 
-  document.getElementById('newBtn').addEventListener('click', () => {
+document.getElementById('newBtn').addEventListener('click', () => {
     if (!confirmOnChange()) return;
     undoStack = [];
     redoStack = [];
     saveStateForUndo();
-    // Clear all objects
     for (const obj of objects) {
-      scene.remove(obj);
-      if (obj.userData.outline) scene.remove(obj.userData.outline);
+        scene.remove(obj);
+        if (obj.userData.outline) scene.remove(obj.userData.outline);
     }
     objects = [];
     selected = null;
     currentFileName = '';
     markClean();
     cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
-    panOffset = { x: 0, y: 0 };
-  });
+    targetPanOffset = { x: 0, y: 0 };
+});
 
-  document.getElementById('saveBtn').onclick = function() {
-    let fileName = currentFileName || 'scene.json';
+// Save operations
+document.getElementById('saveBtn').onclick = () => {
+    const fileName = currentFileName || 'scene.json';
     saveScene(fileName);
     markClean();
-  }
+};
 
-  document.getElementById('saveAsBtn').onclick = function() {
-    let fileName = prompt('File name:', currentFileName || 'scene.json');
+document.getElementById('saveAsBtn').onclick = () => {
+    const fileName = prompt('File name:', currentFileName || 'scene.json');
     if (fileName) {
-      currentFileName = fileName;
-      saveScene(fileName);
-      markClean();
+        currentFileName = fileName;
+        saveScene(fileName);
+        markClean();
     }
-  }
+};
 
-  document.getElementById('loadBtn').onclick = function() {
+// Load operation
+document.getElementById('loadBtn').onclick = () => {
     if (!confirmOnChange()) return;
     document.getElementById('fileInput').click();
-  }
+};
 
-  document.getElementById('fileInput').onchange = function(e) {
-    undoStack = [];
-    redoStack = [];
+// File input change handler
+document.getElementById('fileInput').onchange = (e) => {
     const file = e.target.files[0];
     if (!file) return;
+    
+    undoStack = [];
+    redoStack = [];
     currentFileName = file.name;
     markClean();
+    
     const reader = new FileReader();
-    reader.onload = function(ev) {
-      try {
-        const arr = JSON.parse(ev.target.result);
-        for (const obj of objects) {
-          scene.remove(obj);
-          if (obj.userData.outline) scene.remove(obj.userData.outline);
+    reader.onload = (ev) => {
+        try {
+            const arr = JSON.parse(ev.target.result);
+            for (const obj of objects) {
+                scene.remove(obj);
+                if (obj.userData.outline) scene.remove(obj.userData.outline);
+            }
+            objects = [];
+            for (const item of arr) {
+                let mesh, geometry;
+                const color = new THREE.Color(item.color);
+                if (item.type === 'BoxGeometry') {
+                    geometry = new THREE.BoxGeometry(50,50,50);
+                } else if (item.type === 'SphereGeometry') {
+                    geometry = new THREE.SphereGeometry(30, 32, 24);
+                } else if (item.type === 'CylinderGeometry') {
+                    geometry = new THREE.CylinderGeometry(25,25,60, 32);
+                } else if (item.type === 'PlaneGeometry') {
+                    geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
+                } else {
+                    continue;
+                }
+                
+                mesh = new THREE.Mesh(
+                    geometry,
+                    new THREE.MeshPhongMaterial({
+                        color, 
+                        transparent: true, 
+                        opacity: 0.8,
+                        side: item.type === 'PlaneGeometry' ? THREE.DoubleSide : THREE.FrontSide
+                    })
+                );
+                
+                mesh.position.fromArray(item.position);
+                mesh.scale.fromArray(item.scale);
+                mesh.userData = {rotX: item.rotX, rotY: item.rotY};
+                scene.add(mesh);
+                addOutline(mesh, geometry);
+                objects.push(mesh);
+            }
+            cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
+            targetPanOffset = { x: 0, y: 0 };
+        } catch(err) { 
+            alert(currentLanguage === 'tr' ? 'Dosya okunamadı veya bozuk!' : 'File could not be read or is corrupted!'); 
         }
-        objects = [];
-        for (const item of arr) {
-          let mesh, geometry;
-          const color = new THREE.Color(item.color);
-          if (item.type === 'BoxGeometry') {
-            geometry = new THREE.BoxGeometry(50,50,50);
-            mesh = new THREE.Mesh(
-              geometry,
-              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-            );
-          } else if (item.type === 'SphereGeometry') {
-            geometry = new THREE.SphereGeometry(30, 32, 24);
-            mesh = new THREE.Mesh(
-              geometry,
-              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-            );
-          } else if (item.type === 'CylinderGeometry') {
-            geometry = new THREE.CylinderGeometry(25,25,60, 32);
-            mesh = new THREE.Mesh(
-              geometry,
-              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8})
-            );
-          } else if (item.type === 'PlaneGeometry') {
-            geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
-            mesh = new THREE.Mesh(
-              geometry,
-              new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
-            );
-          } else {
-            continue;
-          }
-          mesh.position.fromArray(item.position);
-          mesh.scale.fromArray(item.scale);
-          mesh.userData = {rotX: item.rotX, rotY: item.rotY};
-          scene.add(mesh);
-          addOutline(mesh, geometry);
-          objects.push(mesh);
-        }
-        cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
-        panOffset = { x: 0, y: 0 };
-      } catch(err) { alert(currentLanguage === 'tr' ? 'Dosya okunamadı veya bozuk!' : 'File could not be read or is corrupted!'); }
-    }
+    };
     reader.readAsText(file);
-  }
+};
 
-  // Undo/redo buttons
-  document.getElementById('undoBtn').onclick = undo;
-  document.getElementById('redoBtn').onclick = redo;
+// Undo/redo buttons
+document.getElementById('undoBtn').onclick = undo;
+document.getElementById('redoBtn').onclick = redo;
 
-  // About button
-  const aboutBtn = document.getElementById('aboutBtn');
-  aboutBtn.onclick = function () {
+// About button
+document.getElementById('aboutBtn').onclick = () => {
     const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
     alert(message);
-  };
+};
 
-  // Read language from cookie, default to 'tr' if not set
-  function getCookie(name) {
-    const value = `; ${document.cookie}`;
-    const parts = value.split(`; ${name}=`);
-    if (parts.length === 2) return parts.pop().split(';').shift();
-    return null;
-  }
-  function setCookie(name, value, days) {
-    let expires = '';
-    if (days) {
-      const date = new Date();
-      date.setTime(date.getTime() + (days*24*60*60*1000));
-      expires = '; expires=' + date.toUTCString();
-    }
-    document.cookie = name + '=' + value + expires + '; path=/';
-  }
-
-  let currentLanguage = getCookie('lang') || 'tr'; // Default to Turkish
-
-  // Language buttons by id (works on mobile too)
-  const trBtn = document.getElementById('trDil');
-  const enBtn = document.getElementById('engDil');
-  function handleLanguageClick(lang) {
+// Language handling
+const trBtn = document.getElementById('trDil');
+const enBtn = document.getElementById('engDil');
+const handleLanguageClick = (lang) => {
     currentLanguage = lang;
     setCookie('lang', currentLanguage, 365);
     updateLanguage();
-  }
-  if (trBtn) trBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('tr'); };
-  if (enBtn) enBtn.onclick = function(e) { e.stopPropagation(); handleLanguageClick('en'); };
+};
 
-  function updateLanguage() {
-    // Update menu and other UI elements
-    // Title
-    updateAppTitle();
-    // Check if mobile
-    const isMobile = /Mobi|Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
-    let statusText = '';
-    if (isMobile) {
-      statusText = currentLanguage === 'tr'
-        ? 'Kısayollar: [Tek Dokun] Seç/Sürükle | [Çift Dokun] Sil | [İki Parmak] Kamera | [İki Parmak Sürükle] Pan | [Uzun Bas] Menü'
-        : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera | [Two Fingers Drag] Pan | [Long Press] Menu';
-    } else {
-      statusText = currentLanguage === 'tr'
-        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil | [Orta Tık] Pan | [Ctrl+Z] Geri Al | [Ctrl+Y] Yinele'
-        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
-    }
-    document.getElementById('statusBar').textContent = statusText;
-    // Menu titles and buttons
-    document.querySelectorAll('#menu button').forEach(btn => {
-      const label = btn.getAttribute('data-label');
-      if (label && menuMap[label]) {
-        btn.textContent = menuMap[label][currentLanguage];
-      }
-    });
-  }
+if (trBtn) trBtn.onclick = (e) => { e.stopPropagation(); handleLanguageClick('tr'); };
+if (enBtn) enBtn.onclick = (e) => { e.stopPropagation(); handleLanguageClick('en'); };
 
-  // Apply current language on page load
-  updateLanguage();
-  setCookie('lang', currentLanguage, 365);
+// Theme buttons
+const darkThemeBtn = document.getElementById('darkTema');
+const lightThemeBtn = document.getElementById('lightTema');
+
+if (darkThemeBtn) darkThemeBtn.addEventListener('click', () => setTheme('dark'));
+if (lightThemeBtn) lightThemeBtn.addEventListener('click', () => setTheme('light'));
+
+// Initialize on load
+document.addEventListener('DOMContentLoaded', () => {
+    // Apply initial theme
+    setTheme(savedTheme);
+    // Apply current language
+    updateLanguage();
+    setCookie('lang', currentLanguage, 365);
 });
 
 animate();
