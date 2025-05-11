@@ -4,6 +4,9 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <meta name="description" content="3D Tasarım Uygulaması">
+    <meta name="theme-color" content="#151c2c">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎨</text></svg>">
     <title>3D Tasarım</title>
     <link rel="stylesheet" href="style.css">
 </head>
@@ -11,6 +14,7 @@
 <body>
     <div id="projectName">3D Tasarım</div>
     <canvas id="scene" tabindex="0"></canvas>
+    <canvas id="sky" width="800" height="600"></canvas>
     <div id="menu">
         <ul>
             <li><button data-label="Dosya" type="button">Dosya</button>
@@ -34,11 +38,12 @@
             </li>
             <li><button data-label="Ayarlar" type="button">Ayarlar</button>
                 <ul>
-                    
+
                     <li><button id="languageBtn" data-label="Dil" type="button">Dil ></button>
                         <ul>
                             <li><button data-lang="tr" data-label="Türkçe" id="trDil" type="button">Türkçe</button></li>
-                            <li><button data-lang="en" data-label="İngilizce" id="engDil" type="button">İngilizce</button></li>
+                            <li><button data-lang="en" data-label="İngilizce" id="engDil"
+                                    type="button">İngilizce</button></li>
                         </ul>
                     </li>
                     <li><button id="themeBtn" data-label="Tema" type="button">Tema ></button>
@@ -55,6 +60,7 @@
     </div>
     <div id="statusBar">Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset</div>
     <input type="file" id="fileInput" style="display:none" accept="application/json" />
+    <script src="csg.js"></script>
     <script type="module" src="main.js"></script>
 </body>
 
