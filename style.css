@@ -158,3 +158,83 @@ body, #menu ul, #menu button, #statusBar {
     height: 100vh;
   }
 }
+
+/* Properties Panel Styles */
+#propertiesPanel {
+  position: absolute;
+  top: 100px;
+  left: 100px;
+  width: 200px;
+  background: rgba(255,255,255,0.9);
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  z-index: 1000;
+}
+#propertiesPanel.hidden {
+  display: none;
+}
+#propertiesHeader {
+  background: #f0f0f0;
+  padding: 4px;
+  cursor: move;
+  font-weight: bold;
+  border-bottom: 1px solid #ccc;
+}
+#propertiesContent {
+  padding: 4px;
+  font-size: 12px;
+}
+#propertiesContent label {
+  display: grid;
+  align-items: center;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+#propertiesContent label#labelPos,
+#propertiesContent label#labelRot,
+#propertiesContent label#labelScale {
+  grid-template-columns: auto repeat(3, 1fr);
+}
+#propertiesContent label#labelColor {
+  grid-template-columns: auto auto;
+}
+#propertiesContent label input {
+  width: 100%;
+}
+#propertiesContent input {
+  width: 100%;
+  margin-top: 2px;
+  margin-bottom: 6px;
+  font-size: 12px;
+}
+
+/* Properties Panel Theme Support */
+body.dark #propertiesPanel {
+  background: rgba(30,30,30,0.9);
+  color: #fff;
+  border-color: #555;
+}
+body.dark #propertiesHeader {
+  background: #444;
+  color: #fff;
+}
+body.dark #propertiesContent input {
+  background: #333;
+  color: #fff;
+  border: 1px solid #555;
+}
+
+body.light #propertiesPanel {
+  background: rgba(255,255,255,0.9);
+  color: #000;
+  border-color: #ccc;
+}
+body.light #propertiesHeader {
+  background: #f0f0f0;
+  color: #000;
+}
+body.light #propertiesContent input {
+  background: #fff;
+  color: #000;
+  border: 1px solid #ccc;
+}

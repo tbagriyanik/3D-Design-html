@@ -58,8 +58,8 @@ function updateLanguage() {
         : 'Shortcuts: [Tap] Select/Move | [Double Tap] Delete | [Two Fingers] Camera | [Two Fingers Drag] Pan | [Long Press] Menu';
     } else {
       statusText = currentLanguage === 'tr'
-        ? 'Kısayollar: [Shift] Taşı | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil | [Orta Tık] Pan | [Ctrl+Z] Geri Al | [Ctrl+Y] Yinele'
-        : 'Shortcuts: [Shift] Move | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
+        ? 'Kısayollar: [Sürükle] Taşı | [Shift+Sürükle] Döndür | [Ctrl] Ölçekle | [Sağ Tık] Reset | [Del] Sil | [Orta Tık] Pan | [Ctrl+Z] Geri Al | [Ctrl+Y] Yinele'
+        : 'Shortcuts: [Drag] Move | [Shift+Drag] Rotate | [Ctrl] Scale | [Right Click] Reset | [Del] Delete | [Middle Click] Pan | [Ctrl+Z] Undo | [Ctrl+Y] Redo';
     }
     document.getElementById('statusBar').textContent = statusText;
     // Menu titles and buttons
@@ -78,6 +78,30 @@ function updateLanguage() {
     }
     if (lightThemeBtn) {
         lightThemeBtn.textContent = menuMap['Açık'][currentLanguage];
+    }
+
+    // Properties panel localization
+    const propHeader = document.getElementById('propertiesHeader');
+    if (propHeader) {
+      const shapeLabels = {
+        cube: {tr: 'Küp', en: 'Cube'},
+        sphere: {tr: 'Küre', en: 'Sphere'},
+        cylinder: {tr: 'Silindir', en: 'Cylinder'},
+        plane: {tr: 'Plane', en: 'Plane'}
+      };
+      propHeader.textContent = (selected && shapeLabels[selected.name])
+        ? shapeLabels[selected.name][currentLanguage]
+        : (currentLanguage === 'tr' ? 'Özellikler' : 'Properties');
+    }
+    const groupLabels = {
+      labelPos: {tr: 'Konum:', en: 'Position:'},
+      labelRot: {tr: 'Dönüş:', en: 'Rotation:'},
+      labelScale: {tr: 'Ölçek:', en: 'Scale:'},
+      labelColor: {tr: 'Renk:', en: 'Color:'}
+    };
+    for (const [id, texts] of Object.entries(groupLabels)) {
+      const lbl = document.getElementById(id);
+      if (lbl) lbl.childNodes[0].textContent = texts[currentLanguage];
     }
 }
 
@@ -372,6 +396,12 @@ document.addEventListener('mousemove', e => {
         }
       }
     } else if (isShift) {
+      // rotation with Shift
+      const speed = 0.5;
+      selected.userData.rotY += dx * speed;
+      selected.userData.rotX += dy * speed;
+    } else {
+      // translation on normal drag
       if (selectedFaceNormal) {
         const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
         let axis = 'x';
@@ -389,11 +419,6 @@ document.addEventListener('mousemove', e => {
           selected.userData.outline.position.copy(selected.position);
         }
       }
-    } else {
-      // For Plane, classic rotation (all angles)
-      const speed = 0.5;
-      selected.userData.rotY += dx * speed;
-      selected.userData.rotX += dy * speed;
     }
     lastX = e.clientX;
     lastY = e.clientY;
@@ -536,6 +561,12 @@ canvas.addEventListener('touchmove', e => {
           }
         }
       } else if (isShift) {
+        // rotation with Shift
+        const speed = 0.5;
+        selected.userData.rotY += dx * speed;
+        selected.userData.rotX += dy * speed;
+      } else {
+        // translation on normal drag
         if (selectedFaceNormal) {
           const abs = selectedFaceNormal.clone().set(Math.abs(selectedFaceNormal.x), Math.abs(selectedFaceNormal.y), Math.abs(selectedFaceNormal.z));
           let axis = 'x';
@@ -553,11 +584,6 @@ canvas.addEventListener('touchmove', e => {
             selected.userData.outline.position.copy(selected.position);
           }
         }
-      } else {
-        // For Plane, classic rotation (all angles)
-        const speed = 0.5;
-        selected.userData.rotY += dx * speed;
-        selected.userData.rotX += dy * speed;
       }
       markDirty();
     } else if (isCameraDrag) {
@@ -631,6 +657,7 @@ function addShape(type, x, y) {
       new THREE.MeshPhongMaterial({color, transparent:true, opacity:0.8, side: THREE.DoubleSide})
     );
   }
+  mesh.name = type;
   // Start with reset states
   mesh.position.set(0, grid.position.y + 1, 0); // 1 unit above the grid
   mesh.scale.set(1, 1, 1);
@@ -705,9 +732,12 @@ function animate() {
     if (obj.userData.outline) {
       obj.userData.outline.position.copy(obj.position);
       obj.userData.outline.rotation.copy(obj.rotation);
+      obj.userData.outline.scale.copy(obj.scale);
     }
   }
   renderer.render(scene, camera);
+  // FIRST_EDIT: update properties panel with selected object values
+  updatePropertiesPanel();
   requestAnimationFrame(animate);
 }
 
@@ -820,6 +850,9 @@ document.getElementById('fileInput').onchange = (e) => {
             }
             cameraTargetOrbit = { rotY: 0, rotX: 0, distance: 400 };
             targetPanOffset = { x: 0, y: 0 };
+            // Reset selection and hide properties panel
+            selected = null;
+            updatePropertiesPanel();
         } catch(err) { 
             alert(currentLanguage === 'tr' ? 'Dosya okunamadı veya bozuk!' : 'File could not be read or is corrupted!'); 
         }
@@ -863,6 +896,118 @@ document.addEventListener('DOMContentLoaded', () => {
     // Apply current language
     updateLanguage();
     setCookie('lang', currentLanguage, 365);
+});
+
+// SECOND_EDIT: Add properties panel initialization, drag-and-drop, and update function
+const panel = document.createElement('div');
+panel.id = 'propertiesPanel';
+panel.innerHTML = `
+  <div id="propertiesHeader">Properties</div>
+  <div id="propertiesContent">
+    <label id="labelPos">Position: <input type="number" id="propPosX"/> <input type="number" id="propPosY"/> <input type="number" id="propPosZ"/></label>
+    <label id="labelRot">Rotation: <input type="number" id="propRotX"/> <input type="number" id="propRotY"/> <input type="number" id="propRotZ"/></label>
+    <label id="labelScale">Scale: <input type="number" id="propScaleX"/> <input type="number" id="propScaleY"/> <input type="number" id="propScaleZ"/></label>
+    <label id="labelColor">Color: <input type="color" id="propColor"/></label>
+  </div>
+`;
+document.body.appendChild(panel);
+
+// Make panel draggable and save its position
+let isDraggingPanel = false;
+let panelOffset = {x: 0, y: 0};
+const header = document.getElementById('propertiesHeader');
+header.addEventListener('mousedown', (e) => {
+  isDraggingPanel = true;
+  panelOffset.x = e.clientX - panel.offsetLeft;
+  panelOffset.y = e.clientY - panel.offsetTop;
+});
+document.addEventListener('mousemove', (e) => {
+  if (!isDraggingPanel) return;
+  panel.style.left = (e.clientX - panelOffset.x) + 'px';
+  panel.style.top = (e.clientY - panelOffset.y) + 'px';
+});
+document.addEventListener('mouseup', () => {
+  if (isDraggingPanel) {
+    isDraggingPanel = false;
+    localStorage.setItem('propertiesPanelPos', JSON.stringify({x: panel.offsetLeft, y: panel.offsetTop}));
+  }
+});
+
+// Load saved panel position
+const savedPos = JSON.parse(localStorage.getItem('propertiesPanelPos') || 'null');
+if (savedPos) {
+  panel.style.left = savedPos.x + 'px';
+  panel.style.top = savedPos.y + 'px';
+}
+
+// Function to refresh panel values based on selected object
+function updatePropertiesPanel() {
+  if (!selected) {
+    panel.style.display = 'none';
+    return;
+  }
+  panel.style.display = 'block';
+  // update title to selected object name
+  const header = document.getElementById('propertiesHeader');
+  const shapeLabels = { cube:{tr:'Küp',en:'Cube'}, sphere:{tr:'Küre',en:'Sphere'}, cylinder:{tr:'Silindir',en:'Cylinder'}, plane:{tr:'Plane',en:'Plane'} };
+  header.textContent = shapeLabels[selected.name] ? shapeLabels[selected.name][currentLanguage] : (selected.name.charAt(0).toUpperCase() + selected.name.slice(1));
+  document.getElementById('propPosX').value = selected.position.x.toFixed(2);
+  document.getElementById('propPosY').value = selected.position.y.toFixed(2);
+  document.getElementById('propPosZ').value = selected.position.z.toFixed(2);
+  document.getElementById('propRotX').value = (selected.userData.rotX || 0).toFixed(2);
+  document.getElementById('propRotY').value = (selected.userData.rotY || 0).toFixed(2);
+  document.getElementById('propRotZ').value = THREE.MathUtils.radToDeg(selected.rotation.z).toFixed(2);
+  document.getElementById('propScaleX').value = selected.scale.x.toFixed(2);
+  document.getElementById('propScaleY').value = selected.scale.y.toFixed(2);
+  document.getElementById('propScaleZ').value = selected.scale.z.toFixed(2);
+  const propColorInput = document.getElementById('propColor');
+  if (propColorInput && document.activeElement !== propColorInput) {
+    propColorInput.value = '#' + selected.material.color.getHexString();
+  }
+}
+
+// THIRD_EDIT: add input change handlers
+['propPosX','propPosY','propPosZ','propRotX','propRotY','propRotZ','propScaleX','propScaleY','propScaleZ'].forEach(id => {
+  const input = document.getElementById(id);
+  if (input) input.addEventListener('change', e => {
+    if (!selected) return;
+    const val = parseFloat(e.target.value);
+    switch(id) {
+      case 'propPosX': selected.position.x = val; break;
+      case 'propPosY': selected.position.y = val; break;
+      case 'propPosZ': selected.position.z = val; break;
+      case 'propRotX': selected.userData.rotX = val; selected.rotation.x = THREE.MathUtils.degToRad(val); break;
+      case 'propRotY': selected.userData.rotY = val; selected.rotation.y = THREE.MathUtils.degToRad(val); break;
+      case 'propRotZ': selected.rotation.z = THREE.MathUtils.degToRad(val); break;
+      case 'propScaleX': selected.scale.x = val; break;
+      case 'propScaleY': selected.scale.y = val; break;
+      case 'propScaleZ': selected.scale.z = val; break;
+    }
+    if (selected.userData.outline) {
+      selected.userData.outline.position.copy(selected.position);
+      selected.userData.outline.rotation.copy(selected.rotation);
+      selected.userData.outline.scale.copy(selected.scale);
+    }
+    markDirty();
+  });
+});
+const colorInput = document.getElementById('propColor');
+if (colorInput) {
+  colorInput.addEventListener('change', e => {
+    if (!selected) return;
+    selected.material.color.set(e.target.value);
+    markDirty();
+  });
+}
+
+// Prevent arrow keys from changing input fields and let them control object
+['propPosX','propPosY','propPosZ','propRotX','propRotY','propRotZ','propScaleX','propScaleY','propScaleZ','propColor'].forEach(id => {
+  const input = document.getElementById(id);
+  if (input) input.addEventListener('keydown', e => {
+    if (['ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+    }
+  });
 });
 
 animate();
