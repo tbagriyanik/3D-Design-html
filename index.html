@@ -23,9 +23,15 @@
                     <li><button id="loadBtn" data-label="Aç" type="button">Aç</button></li>
                     <li><button id="saveBtn" data-label="Kaydet" type="button">Kaydet</button></li>
                     <li><button id="saveAsBtn" data-label="Farklı Kaydet" type="button">Farklı Kaydet</button></li>
-                    <hr noshade="noshade" size="1" color="#ccc" />
+                </ul>
+            </li>
+            <li><button data-label="Düzen" type="button">Düzen</button>
+                <ul>
                     <li><button id="undoBtn" data-label="Geri Al" type="button">Geri Al</button></li>
                     <li><button id="redoBtn" data-label="Yinele" type="button">Yinele</button></li>
+                    <li><button id="copyBtn" data-label="Kopyala" type="button">Kopyala</button></li>
+                    <li><button id="pasteBtn" data-label="Yapıştır" type="button">Yapıştır</button></li>
+                    <li><button id="deleteBtn" data-label="Sil" type="button">Sil</button></li>
                 </ul>
             </li>
             <li><button data-label="Ekle" type="button">Ekle</button>
@@ -38,22 +44,11 @@
             </li>
             <li><button data-label="Ayarlar" type="button">Ayarlar</button>
                 <ul>
-
-                    <li><button id="languageBtn" data-label="Dil" type="button">Dil ></button>
-                        <ul>
-                            <li><button data-lang="tr" data-label="Türkçe" id="trDil" type="button">Türkçe</button></li>
-                            <li><button data-lang="en" data-label="İngilizce" id="engDil"
-                                    type="button">İngilizce</button></li>
-                        </ul>
-                    </li>
-                    <li><button id="themeBtn" data-label="Tema" type="button">Tema ></button>
-                        <ul>
-                            <li><button data-theme="dark" type="button" id="darkTema">Koyu</button></li>
-                            <li><button data-theme="light" type="button" id="lightTema">Açık</button></li>
-                        </ul>
-                    </li>
-                    <hr noshade="noshade" size="1" color="#ccc" />
-                    <li><button id="aboutBtn" data-label="Hakkında" type="button">Hakkında</button></li>
+                    <li><button data-label="Türkçe" data-lang="tr" id="trDil" type="button">Türkçe</button></li>
+                    <li><button data-label="İngilizce" data-lang="en" id="engDil" type="button">İngilizce</button></li>
+                    <li><button data-label="Koyu" data-theme="dark" id="darkTema" type="button">Koyu</button></li>
+                    <li><button data-label="Açık" data-theme="light" id="lightTema" type="button">Açık</button></li>
+                    <li><button data-label="Hakkında" id="aboutBtn" type="button">Hakkında</button></li>
                 </ul>
             </li>
         </ul>

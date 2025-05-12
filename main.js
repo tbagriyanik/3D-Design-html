@@ -4,22 +4,26 @@ import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.153.0/build/three.m
 // Menu titles and buttons map (global scope)
 const menuMap = {
   'Dosya': { tr: 'Dosya', en: 'File' },
+  'Düzen': { tr: 'Düzen', en: 'Edit' },
   'Yeni': { tr: 'Yeni', en: 'New' },
   'Kaydet': { tr: 'Kaydet', en: 'Save' },
   'Farklı Kaydet': { tr: 'Farklı Kaydet', en: 'Save As' },
   'Aç': { tr: 'Aç', en: 'Open' },
+  'Geri Al': { tr: 'Geri Al', en: 'Undo' },
+  'Yinele': { tr: 'Yinele', en: 'Redo' },
+  'Kopyala': { tr: 'Kopyala', en: 'Copy' },
+  'Yapıştır': { tr: 'Yapıştır', en: 'Paste' },
+  'Sil': { tr: 'Sil', en: 'Delete' },
   'Ekle': { tr: 'Ekle', en: 'Add' },
   'Küp': { tr: 'Küp', en: 'Cube' },
   'Küre': { tr: 'Küre', en: 'Sphere' },
   'Silindir': { tr: 'Silindir', en: 'Cylinder' },
-  'Plane': { tr: 'Plane', en: 'Plane' },
+  'Plane': { tr: 'Düzlem', en: 'Plane' },
   'Ayarlar': { tr: 'Ayarlar', en: 'Settings' },
   'Hakkında': { tr: 'Hakkında', en: 'About' },
   'Dil': { tr: 'Dil >', en: 'Language >' },
   'Türkçe': { tr: 'Türkçe', en: 'Turkish' },
   'İngilizce': { tr: 'İngilizce', en: 'English' },
-  'Geri Al': { tr: 'Geri Al', en: 'Undo' },
-  'Yinele': { tr: 'Yinele', en: 'Redo' },
   'Tema': { tr: 'Tema >', en: 'Theme >' },
   'Koyu': { tr: 'Koyu', en: 'Dark' },
   'Açık': { tr: 'Açık', en: 'Light' },
@@ -148,7 +152,7 @@ function setTheme(theme) {
   } else {
     renderer.setClearColor(0xf5f7fa);
     if (sky) sky.material = skyMaterialLight;
-    if (grid) grid.material.opacity = 0.5;
+    if (grid) grid.material.opacity = 0.35;
   }
 }
 
@@ -390,13 +394,10 @@ const materialPool = {
   outline: [],
   
   getStandard(color) {
-    let material = this.standard.find(m => m.color.getHex() === color.getHex());
-    if (!material) {
-      material = createStandardMaterial(color);
-      this.standard.push(material);
-      if (this.standard.length > PERFORMANCE_SETTINGS.materialPoolSize) {
-        this.standard.shift().dispose();
-      }
+    let material = createStandardMaterial(color);
+    this.standard.push(material);
+    if (this.standard.length > PERFORMANCE_SETTINGS.materialPoolSize) {
+      this.standard.shift().dispose();
     }
     return material;
   },
@@ -405,8 +406,8 @@ const materialPool = {
     let material = this.outline.find(m => !m.isUsed);
     if (!material) {
       material = new THREE.LineBasicMaterial({ 
-        color: 0x00ff66, 
-        linewidth: 7,
+        color: 0xFF00FF, 
+        linewidth: 10,
         transparent: true,
         opacity: 0.8
       });
@@ -447,7 +448,13 @@ function createObject(type, color) {
         throw new Error('Invalid object type');
     }
     
-    const material = materialPool.getStandard(color);
+    // Ensure the color is not fuchsia (0xFF00FF)
+    let newColor = color;
+    if (newColor === 0xFF00FF) {
+      newColor = Math.floor(Math.random() * 16777215); // Generate a random hex color
+    }
+
+    const material = materialPool.getStandard(new THREE.Color(newColor));
     const mesh = new THREE.Mesh(geometry, material);
     
     // Set initial properties
@@ -479,7 +486,7 @@ function createObject(type, color) {
     
     return mesh;
   } catch (error) {
-    console.error('Object creation failed:', error);
+    showToast(currentLanguage === 'tr' ? 'Nesne oluşturulamadı!' : 'Failed to create object!');
     return null;
   }
 }
@@ -500,7 +507,7 @@ function addShape(type) {
       markDirty();
     }
   } catch (error) {
-    console.error('Add shape failed:', error);
+    showToast(currentLanguage === 'tr' ? 'Şekil ekleme başarısız!' : 'Failed to add shape!');
   }
 }
 
@@ -545,12 +552,24 @@ function optimizeMemory() {
   if (undoStack.length > PERFORMANCE_SETTINGS.maxUndoSteps) {
     undoStack = undoStack.slice(-PERFORMANCE_SETTINGS.maxUndoSteps);
   }
-  
+
   // Clear redo stack if too large
   if (redoStack.length > PERFORMANCE_SETTINGS.maxUndoSteps) {
     redoStack = redoStack.slice(-PERFORMANCE_SETTINGS.maxUndoSteps);
   }
-  
+
+  // Dispose of unused geometries and materials
+  scene.children.forEach(child => {
+    if (child instanceof THREE.Mesh) {
+      if (child.geometry && !objects.includes(child)) {
+        child.geometry.dispose();
+      }
+      if (child.material && !objects.includes(child)) {
+        child.material.dispose();
+      }
+    }
+  });
+
   // Force garbage collection if available
   if (window.gc) {
     window.gc();
@@ -564,32 +583,25 @@ setInterval(optimizeMemory, 30000); // Every 30 seconds
 function saveStateForUndo(isUserAction = true) {
   const state = {
     objects: objects.map(obj => {
-      if (obj.isGroup) {
-        return {
-          name: obj.name,
-          type: 'Group',
-          position: [obj.position.x, obj.position.y, obj.position.z],
-          scale: [obj.scale.x, obj.scale.y, obj.scale.z],
-          rotX: obj.userData.rotX || 0,
-          rotY: obj.userData.rotY || 0,
-          children: obj.children.map(child => ({
-            type: child.geometry.type,
-            position: [child.position.x, child.position.y, child.position.z],
-            scale: [child.scale.x, child.scale.y, child.scale.z],
-            color: child.material.color.getHex()
-          }))
-        };
-      } else {
-        return {
-          name: obj.name,
-          type: obj.geometry.type,
-          position: [obj.position.x, obj.position.y, obj.position.z],
-          scale: [obj.scale.x, obj.scale.y, obj.scale.z],
-          rotX: obj.userData.rotX || 0,
-          rotY: obj.userData.rotY || 0,
-          color: obj.material.color.getHex()
-        };
+      let geometryData = null;
+      if (obj.geometry instanceof THREE.BufferGeometry) {
+        geometryData = obj.geometry.toJSON();
       }
+
+      return {
+        name: obj.name,
+        type: obj.geometry.type,
+        position: [obj.position.x, obj.position.y, obj.position.z],
+        scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+        rotX: obj.userData.rotX || 0,
+        rotY: obj.userData.rotY || 0,
+        color: obj.material.color.getHex(),
+        transparent: obj.material.transparent,
+        opacity: obj.material.opacity,
+        shininess: obj.material.shininess !== undefined ? obj.material.shininess : 30,
+        specular: obj.material.specular ? obj.material.specular.getHex() : null,
+        geometryData: geometryData
+      };
     }),
     selectedIndex: selected ? objects.indexOf(selected) : -1,
     camera: { ...cameraTargetOrbit },
@@ -615,84 +627,56 @@ function restoreState(stateStr) {
     objects = [];
     
     for (const item of state.objects) {
-      if (item.type === 'Group') {
-        // Create group
-        const group = new THREE.Group();
-        group.name = item.name;
-        group.position.fromArray(item.position);
-        group.scale.fromArray(item.scale);
-        group.userData = { rotX: item.rotX, rotY: item.rotY, isGroup: true };
-        
-        // Add children to group
-        for (const childData of item.children) {
-          let geometry;
-          const color = new THREE.Color(childData.color);
-          const material = createStandardMaterial(color);
-          
-          if (childData.type === 'BoxGeometry') {
-            geometry = new THREE.BoxGeometry(50, 50, 50);
-          } else if (childData.type === 'SphereGeometry') {
-            geometry = new THREE.SphereGeometry(30, 32, 24);
-          } else if (childData.type === 'CylinderGeometry') {
-            geometry = new THREE.CylinderGeometry(25, 25, 60, 32);
-          } else if (childData.type === 'PlaneGeometry') {
-            geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
-          }
-          
-          if (geometry) {
-            const mesh = new THREE.Mesh(geometry, material);
-            mesh.position.fromArray(childData.position);
-            mesh.scale.fromArray(childData.scale);
-            group.add(mesh);
-          }
-        }
-        
-        scene.add(group);
-        const boxHelper = new THREE.BoxHelper(group, 0x00ff66);
-        boxHelper.material.linewidth = 7;
-        scene.add(boxHelper);
-        group.userData.outline = boxHelper;
-        objects.push(group);
+      let mesh, geometry;
+      const color = new THREE.Color(item.color);
+      const material = new THREE.MeshPhongMaterial({
+        color,
+        transparent: item.transparent,
+        opacity: item.opacity,
+        shininess: item.shininess !== undefined ? item.shininess : 30,
+        specular: item.specular ? new THREE.Color(item.specular) : null
+      });
+
+      if (item.geometryData) {
+        geometry = THREE.BufferGeometry.fromJSON(item.geometryData);
+      } else if (item.type === 'BoxGeometry') {
+        geometry = new THREE.BoxGeometry(50, 50, 50);
+      } else if (item.type === 'SphereGeometry') {
+        geometry = new THREE.SphereGeometry(30, 32, 24);
+      } else if (item.type === 'CylinderGeometry') {
+        geometry = new THREE.CylinderGeometry(25, 25, 60, 32);
       } else {
-        // Handle regular objects as before
-        let mesh, geometry;
-        const color = new THREE.Color(item.color);
-        const material = createStandardMaterial(color);
-        
-        if (item.type === 'BoxGeometry') {
-          geometry = new THREE.BoxGeometry(50, 50, 50);
-        } else if (item.type === 'SphereGeometry') {
-          geometry = new THREE.SphereGeometry(30, 32, 24);
-        } else if (item.type === 'CylinderGeometry') {
-          geometry = new THREE.CylinderGeometry(25, 25, 60, 32);
-        } else if (item.type === 'PlaneGeometry') {
-          geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
-        }
-        
-        if (geometry) {
-          mesh = new THREE.Mesh(geometry, material);
-          mesh.name = item.name;
-          mesh.position.fromArray(item.position);
-          mesh.scale.fromArray(item.scale);
-          mesh.userData = { rotX: item.rotX, rotY: item.rotY };
-          scene.add(mesh);
-          addOutline(mesh, geometry);
-          objects.push(mesh);
-        }
+        geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
+      }
+      mesh = new THREE.Mesh(
+        geometry,
+        material
+      );
+      mesh.name = item.name;
+      mesh.position.fromArray(item.position);
+      mesh.rotation.set(THREE.MathUtils.degToRad(item.rotX), THREE.MathUtils.degToRad(item.rotY), 0);
+      mesh.scale.fromArray(item.scale);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      scene.add(mesh);
+      addOutline(mesh, geometry);
+      objects.push(mesh);
+      const idMatch = item.name.match(/\d+/);
+      if (idMatch) {
+        const idNum = parseInt(idMatch[1]);
+        if (idNum >= objectIdCounter) objectIdCounter = idNum + 1;
       }
     }
-    
-    // Restore selection
-    selected = state.selectedIndex !== -1 ? objects[state.selectedIndex] : null;
-    
-    // Restore camera and pan
-    cameraTargetOrbit = state.camera || { rotY: 30, rotX: 10, distance: 400 };
-    targetPanOffset = state.pan || { x: 0, y: 0 };
-    
+    cameraTargetOrbit = state.camera;
+    targetPanOffset = state.pan;
+    // Restore selection by name if possible
+    selected = null;
+    selectedObjects = [];
     updatePropertiesPanel();
+    updateBooleanPanel();
+    selectObject(objects[state.selectedIndex]);
   } catch (err) {
-    console.error('Restore state failed:', err);
-    alert(currentLanguage === 'tr' ? 'Durum geri yüklenemedi!' : 'Failed to restore state!');
+    showToast(currentLanguage === 'tr' ? 'Durum geri yüklenemedi!' : 'Failed to restore state!');
   }
 }
 
@@ -702,6 +686,8 @@ function undo() {
   redoStack.push(currentState);
   restoreState(undoStack[undoStack.length - 1]);
   markDirty();
+  updatePropertiesPanel();
+  updateBooleanPanel();
 }
 
 function redo() {
@@ -710,6 +696,8 @@ function redo() {
   undoStack.push(nextState);
   restoreState(nextState);
   markDirty();
+  updatePropertiesPanel();
+  updateBooleanPanel();
 }
 
 // <title> etiketini güncelle
@@ -785,7 +773,7 @@ window.addEventListener('keydown', e => {
       saveStateForUndo(false);
       for (const obj of selectedObjects) {
         scene.remove(obj);
-        if (obj.userData.outline) scene.remove(obj.userData.outline);
+        if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
         objects = objects.filter(o => o !== obj);
       }
       selectedObjects = [];
@@ -830,7 +818,7 @@ canvas.addEventListener('mousedown', e => {
     selectedFaceNormal = intersects[0].face ? intersects[0].face.normal.clone() : null;
   } else {
     if (!isShift) {
-      // Only clear selection if not trying to multi-select
+      // Only clear selection unless appending
       selectObject(null);
     }
     isCameraDrag = true;
@@ -854,9 +842,9 @@ document.addEventListener('mousemove', e => {
     if (isCtrl || isShift) saveStateForUndo();
     const dx = e.clientX - lastX;
     const dy = e.clientY - lastY;
-    const moveSnap = isAlt ? GRID_STEP / 4 : 0.5; // Reduced from 1 to 0.5
-    const rotSnap = isAlt ? 5 : 0.25; // Reduced from 1 to 0.25
-    const scaleSnap = isAlt ? (GRID_STEP / 80) / 4 : 0.005; // Reduced from 0.01 to 0.005
+    const moveSnap = isAlt ? GRID_STEP / 16 : 0.2; // finer snap for smoother movement
+    const rotSnap = isAlt ? 1 : 0.1; // finer snap for smoother rotation
+    const scaleSnap = isAlt ? (GRID_STEP / 160) / 4 : 0.005; // finer snap for smoother scaling
     if (isCtrl) {
       // For Plane, scale only in X and Z axes
       if (selected.geometry && selected.geometry.type === 'PlaneGeometry') {
@@ -897,7 +885,7 @@ document.addEventListener('mousemove', e => {
       }
     } else if (isShift) {
       // rotation with Shift
-      const speed = 0.25 * rotSnap; // Reduced from 0.5 to 0.25
+      const speed = rotSnap; // smoother rotation speed
       selected.userData.rotY += dx * speed;
       selected.userData.rotX += dy * speed;
     } else {
@@ -1106,7 +1094,7 @@ canvas.addEventListener('touchend', e => {
     if (now - lastTap < 400) { // Delete if tapped twice within 400ms
       saveStateForUndo(false);
       scene.remove(selected);
-      if (selected.userData.outline) scene.remove(selected.userData.outline);
+      if (selected.userData && selected.userData.outline) scene.remove(selected.userData.outline);
       objects = objects.filter(obj => obj !== selected);
       selected = null;
       markDirty();
@@ -1134,8 +1122,8 @@ function addOutline(mesh, geometry) {
     const line = new THREE.LineSegments(
       edges,
       new THREE.LineBasicMaterial({ 
-        color: 0x00ff66, 
-        linewidth: 7,
+        color: 0xFF00FF, 
+        linewidth: 10,
         transparent: true,
         opacity: 0.8
       })
@@ -1149,7 +1137,7 @@ function addOutline(mesh, geometry) {
     mesh.userData = mesh.userData || {};
     mesh.userData.outline = line;
   } catch (error) {
-    console.warn('Outline creation failed:', error);
+    showToast(currentLanguage === 'tr' ? 'Çizgi oluşturulamadı!' : 'Failed to create outline!');
   }
 }
 
@@ -1171,7 +1159,7 @@ function updateOutline(obj) {
       if (obj.scale) outline.scale.copy(obj.scale);
     }
   } catch (error) {
-    console.warn('Outline update failed:', error);
+    showToast(currentLanguage === 'tr' ? 'Çizgi güncellenemedi!' : 'Failed to update outline!');
     // Clean up invalid outline
     if (obj && obj.userData && obj.userData.outline) {
       try {
@@ -1186,15 +1174,27 @@ function updateOutline(obj) {
 
 // Function to save the scene as JSON
 function saveScene(filename) {
-  const arr = objects.map(obj => ({
-    name: obj.name,
-    type: obj.geometry.type,
-    position: [obj.position.x, obj.position.y, obj.position.z],
-    scale: [obj.scale.x, obj.scale.y, obj.scale.z],
-    rotX: obj.userData.rotX || 0,
-    rotY: obj.userData.rotY || 0,
-    color: obj.material.color.getHex()
-  }));
+  const arr = objects.map(obj => {
+    let geometryData = null;
+    if (obj.geometry instanceof THREE.BufferGeometry) {
+      geometryData = obj.geometry.toJSON();
+    }
+
+    return {
+      name: obj.name,
+      type: obj.geometry.type,
+      position: [obj.position.x, obj.position.y, obj.position.z],
+      scale: [obj.scale.x, obj.scale.y, obj.scale.z],
+      rotX: obj.userData.rotX || 0,
+      rotY: obj.userData.rotY || 0,
+      color: obj.material.color.getHex(),
+      transparent: obj.material.transparent,
+      opacity: obj.material.opacity,
+      shininess: obj.material.shininess !== undefined ? obj.material.shininess : 30,
+      specular: obj.material.specular ? obj.material.specular.getHex() : null,
+      geometryData: geometryData
+    };
+  });
   const blob = new Blob([JSON.stringify(arr, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1208,7 +1208,9 @@ function selectObject(obj, appendToSelection = false) {
   if (!appendToSelection) {
     // Clear previous selection unless appending
     for (const o of selectedObjects) {
-      if (o.userData.outline) o.userData.outline.visible = false;
+      if (o.userData && o.userData.outline) {
+        o.userData.outline.visible = false;
+      }
     }
     selectedObjects = [];
   }
@@ -1217,10 +1219,14 @@ function selectObject(obj, appendToSelection = false) {
   const index = selectedObjects.indexOf(obj);
   if (index !== -1 && appendToSelection) {
     selectedObjects.splice(index, 1);
-    if (obj && obj.userData.outline) obj.userData.outline.visible = false;
+    if (obj && obj.userData && obj.userData.outline) {
+      obj.userData.outline.visible = false;
+    }
   } else if (obj !== null) {
     selectedObjects.push(obj);
-    if (obj.userData.outline) obj.userData.outline.visible = true;
+    if (obj.userData && obj.userData.outline) {
+      obj.userData.outline.visible = true;
+    }
   }
   
   // Set the primary selected object (for single-object operations)
@@ -1309,7 +1315,7 @@ function animate() {
     updatePropertiesPanel();
     requestAnimationFrame(animate);
   } catch (error) {
-    console.error('Animation error:', error);
+    showToast(currentLanguage === 'tr' ? 'Animasyon hatası!' : 'Animation error!');
     requestAnimationFrame(animate);
   }
 }
@@ -1338,15 +1344,18 @@ document.getElementById('newBtn').addEventListener('click', () => {
   saveStateForUndo();
   for (const obj of objects) {
     scene.remove(obj);
-    if (obj.userData.outline) scene.remove(obj.userData.outline);
+    if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
   }
   objects = [];
   selected = null;
+  selectedObjects = [];
   currentFileName = '';
   objectIdCounter = 1;
   markClean();
   cameraTargetOrbit = { rotY: 30, rotX: 10, distance: 400 };
   targetPanOffset = { x: 0, y: 0 };
+  document.getElementById('propertiesPanel').style.display = 'none';
+  document.getElementById('booleanPanel').style.display = 'none';
 });
 
 // Save operations
@@ -1387,45 +1396,52 @@ document.getElementById('fileInput').onchange = (e) => {
       const arr = JSON.parse(ev.target.result);
       for (const obj of objects) {
         scene.remove(obj);
-        if (obj.userData.outline) scene.remove(obj.userData.outline);
+        if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
       }
       objects = [];
       let maxId = 0;
+      objectIdCounter = 1; // Reset objectIdCounter
       for (const item of arr) {
         let mesh, geometry;
         const color = new THREE.Color(item.color);
         const material = new THREE.MeshPhongMaterial({
           color,
-          transparent: true,
-          opacity: 0.8,
-          shininess: 30,
-          specular: 0x222222
+          transparent: item.transparent,
+          opacity: item.opacity,
+          shininess: item.shininess !== undefined ? item.shininess : 30,
+          specular: item.specular ? new THREE.Color(item.specular) : null
         });
-        if (item.type === 'BoxGeometry') {
+
+        if (item.geometryData) {
+          try {
+            geometry = THREE.BufferGeometry.fromJSON(item.geometryData);
+          } catch (e) {
+            showToast(currentLanguage === 'tr' ? 'Geometri verisi hatalı!' : 'Invalid geometry data!');
+            return;
+          }
+        } else if (item.type === 'BoxGeometry') {
           geometry = new THREE.BoxGeometry(50, 50, 50);
         } else if (item.type === 'SphereGeometry') {
           geometry = new THREE.SphereGeometry(30, 32, 24);
         } else if (item.type === 'CylinderGeometry') {
           geometry = new THREE.CylinderGeometry(25, 25, 60, 32);
-        } else if (item.type === 'PlaneGeometry') {
-          geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
         } else {
-          continue;
+          geometry = new THREE.PlaneGeometry(80, 80, 1, 1);
         }
-
         mesh = new THREE.Mesh(
           geometry,
           material
         );
-        mesh.name = item.name || (item.type + '_' + (objectIdCounter++));
+        mesh.name = item.name;
         mesh.position.fromArray(item.position);
+        mesh.rotation.set(THREE.MathUtils.degToRad(item.rotX), THREE.MathUtils.degToRad(item.rotY), 0);
         mesh.scale.fromArray(item.scale);
-        mesh.userData = { rotX: item.rotX, rotY: item.rotY };
+        mesh.castShadow = true;
+        mesh.receiveShadow = true;
         scene.add(mesh);
         addOutline(mesh, geometry);
         objects.push(mesh);
-        // Update objectIdCounter to avoid duplicate names
-        const idMatch = /_(\d+)$/.exec(mesh.name);
+        const idMatch = item.name.match(/\d+/);
         if (idMatch) {
           const idNum = parseInt(idMatch[1]);
           if (idNum >= objectIdCounter) objectIdCounter = idNum + 1;
@@ -1435,16 +1451,15 @@ document.getElementById('fileInput').onchange = (e) => {
       targetPanOffset = { x: 0, y: 0 };
       // Restore selection by name if possible
       selected = null;
-      if (arr.length > 0 && arr[0].name) {
-        const selName = arr[0].name;
-        selected = objects.find(o => o.name === selName) || null;
-      }
+      selectedObjects = [];
       updatePropertiesPanel();
     } catch (err) {
-      alert(currentLanguage === 'tr' ? 'Dosya okunamadı veya bozuk!' : 'File could not be read or is corrupted!');
+      showToast(currentLanguage === 'tr' ? 'Durum geri yüklenemedi!' : 'Failed to restore state!');
     }
   };
   reader.readAsText(file);
+  document.getElementById('propertiesPanel').style.display = 'none';
+  document.getElementById('booleanPanel').style.display = 'none';
 };
 
 // Undo/redo buttons
@@ -1454,7 +1469,7 @@ document.getElementById('redoBtn').onclick = redo;
 // About button
 document.getElementById('aboutBtn').onclick = () => {
   const message = currentLanguage === 'tr' ? 'Tarik Bağrıyanık, Mayıs 2025' : 'Tarik Bagriyanik, May 2025';
-  alert(message);
+  showToast(message);
 };
 
 // Language handling
@@ -1464,8 +1479,9 @@ const handleLanguageClick = (lang) => {
   currentLanguage = lang;
   setCookie('lang', currentLanguage, 365);
   updateLanguage();
+  const langMsg = currentLanguage === 'tr' ? 'Dil Türkçe olarak ayarlandı' : 'Language set to English';
+  showToast(langMsg);
 };
-
 if (trBtn) trBtn.onclick = (e) => { e.stopPropagation(); handleLanguageClick('tr'); };
 if (enBtn) enBtn.onclick = (e) => { e.stopPropagation(); handleLanguageClick('en'); };
 
@@ -1749,16 +1765,14 @@ function createStandardMaterial(color) {
     metalness: 0.7, // Increased from 0.4
     roughness: 0.1, // Decreased from 0.2
     envMapIntensity: 2.0, // Increased from 1.5
-    side: THREE.DoubleSide,
-    clearcoat: 0.5, // Added clearcoat for better reflections
-    clearcoatRoughness: 0.2
+    side: THREE.DoubleSide
   });
 }
 
 // Add group operation
-async function performGroupOperation() {
+function performGroupOperation() {
   if (selectedObjects.length < 2) {
-    alert(currentLanguage === 'tr' ? 'En az iki nesne seçin' : 'Select at least two objects');
+    showToast(currentLanguage === 'tr' ? 'En az iki nesne seçin' : 'Select at least two objects');
     return;
   }
   
@@ -1797,17 +1811,24 @@ async function performGroupOperation() {
       
       // Add vertices
       for (let j = 0; j < position.count; j++) {
-        vertices.push(
-          position.getX(j),
-          position.getY(j),
-          position.getZ(j)
-        );
+        const vertex = new THREE.Vector3();
+        vertex.fromBufferAttribute(position, j);
+        vertex.applyMatrix4(geometry.matrix);
+        vertices.push(vertex.x, vertex.y, vertex.z);
       }
       
       // Add indices
       if (index) {
-        for (let j = 0; j < index.count; j++) {
-          indices.push(index.getX(j) + vertexOffset);
+        for (let j = 0; j < index.count; j += 3) {
+          indices.push(
+            index.getX(j) + vertexOffset,
+            index.getX(j + 1) + vertexOffset,
+            index.getX(j + 2) + vertexOffset
+          );
+        }
+      } else {
+        for (let j = 0; j < position.count; j += 3) {
+          indices.push(j, j + 1, j + 2);
         }
       }
       
@@ -1829,12 +1850,13 @@ async function performGroupOperation() {
       metalness: 0.7,
       roughness: 0.1,
       envMapIntensity: 2.0,
-      side: THREE.DoubleSide,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.2
+      side: THREE.DoubleSide
     });
     
-    const combinedMesh = new THREE.Mesh(combinedGeometry, combinedMaterial);
+    const combinedMesh = new THREE.Mesh(
+      combinedGeometry,
+      combinedMaterial
+    );
     combinedMesh.name = `combined_${objectIdCounter++}`;
     combinedMesh.castShadow = true;
     combinedMesh.receiveShadow = true;
@@ -1850,9 +1872,7 @@ async function performGroupOperation() {
     // Remove old objects
     for (const obj of selectedObjects) {
       scene.remove(obj);
-      if (obj.userData.outline) {
-        scene.remove(obj.userData.outline);
-      }
+      if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
       objects = objects.filter(o => o !== obj);
     }
     
@@ -1870,15 +1890,14 @@ async function performGroupOperation() {
     markDirty();
     
   } catch (error) {
-    console.error('Group operation failed:', error);
-    alert(currentLanguage === 'tr' ? 'İşlem başarısız! Hata: ' + error.message : 'Operation failed! Error: ' + error.message);
+    showToast(currentLanguage === 'tr' ? 'Gruplama başarısız!' : 'Grouping failed!');
   }
 }
 
 // Add boolean operations
-async function performBooleanOperation(operation) {
+function performBooleanOperation(operation) {
   if (selectedObjects.length !== 2) {
-    alert(currentLanguage === 'tr' ? 'Tam olarak iki nesne seçin' : 'Select exactly two objects');
+    showToast(currentLanguage === 'tr' ? 'Tam olarak iki nesne seçin' : 'Select exactly two objects');
     return;
   }
   
@@ -2002,9 +2021,7 @@ async function performBooleanOperation(operation) {
       metalness: 0.7,
       roughness: 0.1,
       envMapIntensity: 2.0,
-      side: THREE.DoubleSide,
-      clearcoat: 0.5,
-      clearcoatRoughness: 0.2
+      side: THREE.DoubleSide
     });
     
     const resultMesh = new THREE.Mesh(resultGeometry, resultMaterial);
@@ -2023,9 +2040,7 @@ async function performBooleanOperation(operation) {
     // Remove old objects
     for (const obj of selectedObjects) {
       scene.remove(obj);
-      if (obj.userData.outline) {
-        scene.remove(obj.userData.outline);
-      }
+      if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
       objects = objects.filter(o => o !== obj);
     }
     
@@ -2043,8 +2058,7 @@ async function performBooleanOperation(operation) {
     markDirty();
     
   } catch (error) {
-    console.error('Boolean operation failed:', error);
-    alert(currentLanguage === 'tr' ? 'İşlem başarısız! Hata: ' + error.message : 'Operation failed! Error: ' + error.message);
+    showToast(currentLanguage === 'tr' ? 'Boolean işlemi başarısız!' : 'Boolean operation failed!');
   }
 }
 
@@ -2058,176 +2072,120 @@ document.getElementById('groupBtn').addEventListener('click', performGroupOperat
 
 animate();
 
-function updateGraphicsQuality(level) {
-  const settings = graphicsQualitySettings[level];
-  
-  // Update renderer settings
-  renderer.setPixelRatio(settings.pixelRatio);
-  renderer.shadowMap.enabled = settings.shadows;
-  renderer.shadowMap.type = settings.shadowType;
-  
-  // Update scene settings
-  scene.traverse((object) => {
-    if (object.isMesh) {
-      // Update material quality
-      if (object.material) {
-        object.material.roughness = settings.materialQuality.roughness;
-        object.material.metalness = settings.materialQuality.metalness;
-        object.material.envMapIntensity = settings.materialQuality.envMapIntensity;
-        
-        // Update texture quality if exists
-        if (object.material.map) {
-          object.material.map.minFilter = settings.textureQuality.minFilter;
-          object.material.map.magFilter = settings.textureQuality.magFilter;
-          object.material.map.anisotropy = settings.textureQuality.anisotropy;
-        }
-      }
-      
-      // Update shadow settings
-      if (settings.shadows) {
-        object.castShadow = true;
-        object.receiveShadow = true;
-        if (object.userData.outline) {
-          object.userData.outline.visible = true;
-        }
-      } else {
-        object.castShadow = false;
-        object.receiveShadow = false;
-        if (object.userData.outline) {
-          object.userData.outline.visible = false;
-        }
-      }
-    }
-  });
-  
-  // Update lighting
-  if (settings.lighting) {
-    ambientLight.intensity = settings.lighting.ambient;
-    directionalLight.intensity = settings.lighting.directional;
-    directionalLight.shadow.mapSize.width = settings.lighting.shadowMapSize;
-    directionalLight.shadow.mapSize.height = settings.lighting.shadowMapSize;
-    directionalLight.shadow.camera.near = settings.lighting.shadowNear;
-    directionalLight.shadow.camera.far = settings.lighting.shadowFar;
+let copiedObject = null;
+
+// Add copy object function
+function copyObject() {
+  if (selected) {
+    copiedObject = selected.clone();
+    copiedObject.name = `Copied ${selected.name}`;
+    // Store the copied object in local storage
+    localStorage.setItem('copiedObject', JSON.stringify(copiedObject.toJSON()));
+    showToast(currentLanguage === 'tr' ? 'Nesne kopyalandı!' : 'Object copied!');
+  } else {
+    showToast(currentLanguage === 'tr' ? 'Lütfen önce bir nesne seçin!' : 'Please select an object first!');
   }
-  
-  // Update post-processing
-  if (settings.postProcessing) {
-    if (composer) {
-      composer.passes.forEach(pass => {
-        if (pass.name === 'bloom') {
-          pass.strength = settings.postProcessing.bloom.strength;
-          pass.radius = settings.postProcessing.bloom.radius;
-        }
-      });
-    }
-  }
-  
-  // Force a render update
-  renderer.render(scene, camera);
-  
-  // Show feedback
-  const feedback = document.createElement('div');
-  feedback.style.position = 'fixed';
-  feedback.style.top = '20px';
-  feedback.style.left = '50%';
-  feedback.style.transform = 'translateX(-50%)';
-  feedback.style.backgroundColor = 'rgba(0, 0, 0, 0.8)';
-  feedback.style.color = 'white';
-  feedback.style.padding = '10px 20px';
-  feedback.style.borderRadius = '5px';
-  feedback.style.zIndex = '1000';
-  feedback.textContent = currentLanguage === 'tr' 
-    ? `Grafik kalitesi: ${level}`
-    : `Graphics quality: ${level}`;
-  
-  document.body.appendChild(feedback);
-  setTimeout(() => feedback.remove(), 2000);
 }
 
-// Update graphics quality settings
-const graphicsQualitySettings = {
-  low: {
-    pixelRatio: 1,
-    shadows: false,
-    shadowType: THREE.BasicShadowMap,
-    materialQuality: {
-      roughness: 0.8,
-      metalness: 0.2,
-      envMapIntensity: 0.5
-    },
-    textureQuality: {
-      minFilter: THREE.LinearFilter,
-      magFilter: THREE.LinearFilter,
-      anisotropy: 1
-    },
-    lighting: {
-      ambient: 0.5,
-      directional: 0.5,
-      shadowMapSize: 512,
-      shadowNear: 0.5,
-      shadowFar: 500
-    },
-    postProcessing: {
-      bloom: {
-        strength: 0.5,
-        radius: 0.5
+// Add paste object function
+function pasteObject() {
+  if (localStorage.getItem('copiedObject')) {
+    try {
+      const storedObject = localStorage.getItem('copiedObject');
+      const copiedObjectData = JSON.parse(storedObject);
+      let geometry, material, mesh;
+
+      if (copiedObjectData.geometry) {
+        try {
+          geometry = THREE.BufferGeometry.fromJSON(copiedObjectData.geometry);
+        } catch (e) {
+          showToast(currentLanguage === 'tr' ? 'Geometri verisi hatalı!' : 'Invalid geometry data!');
+          return;
+        }
+      } else {
+        console.warn('No geometry data found for pasted object.');
+        showToast(currentLanguage === 'tr' ? 'Geometri verisi bulunamadı!' : 'No geometry data found!');
+        return;
       }
+
+      material = new THREE.MeshPhongMaterial({
+        color: new THREE.Color(copiedObjectData.material.color),
+        transparent: copiedObjectData.material.transparent,
+        opacity: copiedObjectData.material.opacity,
+        shininess: copiedObjectData.material.shininess !== undefined ? copiedObjectData.material.shininess : 30,
+        specular: copiedObjectData.material.specular ? new THREE.Color(copiedObjectData.material.specular) : null
+      });
+
+      mesh = new THREE.Mesh(
+        geometry,
+        material
+      );
+      mesh.name = `Pasted ${copiedObjectData.name}`; // Use the name from stored data
+      mesh.position.set(copiedObjectData.position[0] + 10, copiedObjectData.position[1] + 10, copiedObjectData.position[2] + 10);
+      mesh.rotation.set(copiedObjectData.rotation[0], copiedObjectData.rotation[1], copiedObjectData.rotation[2]);
+      mesh.scale.set(copiedObjectData.scale[0], copiedObjectData.scale[1], copiedObjectData.scale[2]);
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+
+      scene.add(mesh);
+      addOutline(mesh, geometry);
+      objects.push(mesh);
+      saveStateForUndo();
+      markDirty();
+      showToast(currentLanguage === 'tr' ? 'Nesne yapıştırıldı!' : 'Object pasted!');
+    } catch (e) {
+      showToast(currentLanguage === 'tr' ? 'Yapıştırma sırasında bir hata oluştu' : 'An error occurred during paste');
     }
-  },
-  medium: {
-    pixelRatio: window.devicePixelRatio,
-    shadows: true,
-    shadowType: THREE.PCFSoftShadowMap,
-    materialQuality: {
-      roughness: 0.5,
-      metalness: 0.5,
-      envMapIntensity: 1.0
-    },
-    textureQuality: {
-      minFilter: THREE.LinearMipMapLinearFilter,
-      magFilter: THREE.LinearFilter,
-      anisotropy: 4
-    },
-    lighting: {
-      ambient: 0.7,
-      directional: 0.7,
-      shadowMapSize: 1024,
-      shadowNear: 0.5,
-      shadowFar: 500
-    },
-    postProcessing: {
-      bloom: {
-        strength: 0.7,
-        radius: 0.7
-      }
-    }
-  },
-  high: {
-    pixelRatio: window.devicePixelRatio * 1.5,
-    shadows: true,
-    shadowType: THREE.PCFSoftShadowMap,
-    materialQuality: {
-      roughness: 0.3,
-      metalness: 0.7,
-      envMapIntensity: 1.5
-    },
-    textureQuality: {
-      minFilter: THREE.LinearMipMapLinearFilter,
-      magFilter: THREE.LinearFilter,
-      anisotropy: 8
-    },
-    lighting: {
-      ambient: 1.0,
-      directional: 1.0,
-      shadowMapSize: 2048,
-      shadowNear: 0.5,
-      shadowFar: 500
-    },
-    postProcessing: {
-      bloom: {
-        strength: 1.0,
-        radius: 1.0
-      }
-    }
+  } else {
+    showToast(currentLanguage === 'tr' ? 'Lütfen önce bir nesne kopyalayın!' : 'Please copy an object first!');
   }
-};
+}
+document.getElementById('copyBtn').addEventListener('click', copyObject);
+document.getElementById('pasteBtn').addEventListener('click', pasteObject);
+
+animate();
+
+// Toast message function
+function showToast(msg, duration = 3000) {
+  const statusBar = document.getElementById('statusBar');
+  const toast = document.createElement('div');
+  toast.innerText = msg;
+  toast.style.position = 'absolute';
+  toast.style.bottom = (statusBar.offsetHeight + 10) + 'px';
+  toast.style.left = '50%';
+  toast.style.transform = 'translateX(-50%)';
+  toast.style.background = 'rgba(0, 0, 0, 0.7)';
+  toast.style.color = '#fff';
+  toast.style.padding = '8px 12px';
+  toast.style.borderRadius = '4px';
+  toast.style.pointerEvents = 'none';
+  toast.style.zIndex = '1000';
+  document.body.appendChild(toast);
+  setTimeout(() => {
+    toast.style.transition = 'opacity 0.5s';
+    toast.style.opacity = '0';
+    setTimeout(() => document.body.removeChild(toast), 500);
+  }, duration);
+}
+
+// Delete selected objects via menu
+function deleteSelected() {
+  if (selectedObjects.length > 0) {
+    saveStateForUndo(false);
+    for (const obj of selectedObjects) {
+      scene.remove(obj);
+      if (obj.userData && obj.userData.outline) scene.remove(obj.userData.outline);
+      objects = objects.filter(o => o !== obj);
+    }
+    selectedObjects = [];
+    selected = null;
+    markDirty();
+    updatePropertiesPanel();
+    updateBooleanPanel();
+  } else {
+    showToast(currentLanguage === 'tr' ? 'Lütfen önce bir nesne seçin!' : 'Please select an object first!');
+  }
+}
+document.getElementById('deleteBtn').addEventListener('click', deleteSelected);
+
+animate();
